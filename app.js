@@ -1,529 +1,312 @@
 
 const AI_API = "https://ai-hub-api.syedhasanshahqadri.workers.dev";
 
-const $ = (s) => document.querySelector(s);
-const messagesEl = $("#messages");
-const welcomeEl = $("#welcome");
-const historyList = $("#historyList");
-const promptInput = $("#promptInput");
-const chatForm = $("#chatForm");
-const toastEl = $("#toast");
+document.addEventListener("DOMContentLoaded", () => {
+  const $ = (selector) => document.querySelector(selector);
 
-let chats = readChats();
-let activeChatId = null;
-let installPrompt = null;
+  const chatForm =
+    $("#chatForm") ||
+    document.querySelector("form");
 
-const themeToggle = $("#themeToggle");
+  const chatInput =
+    $("#messageInput") ||
+    $("#userInput") ||
+    $("#promptInput") ||
+    $("textarea");
 
-// THEME
-function applyTheme(theme) {
-  const light = theme === "light";
-  document.body.classList.toggle("light-theme", light);
+  const chatContainer =
+    $("#chatMessages") ||
+    $("#messages") ||
+    $("#chatHistory");
 
-  themeToggle.innerHTML = light
-    ? '☾ <span>Dark mode</span>'
-    : '☼ <span>Light mode</span>';
+  const imageButton =
+    $("#imageIdeaBtn");
 
-  themeToggle.setAttribute(
-    "aria-label",
-    light ? "Switch to dark theme" : "Switch to light theme"
-  );
+  // Show a small notification.
+  function showToast(message) {
+    const toast = $("#toast");
 
-  themeToggle.title = light ? "Switch to dark theme" : "Switch to light theme";
+    if (toast) {
+      toast.textContent = message;
+      toast.classList.add("show");
 
-  const metaTheme = document.querySelector('meta[name="theme-color"]');
-  if (metaTheme) {
-    metaTheme.setAttribute("content", light ? "#F3F7FC" : "#0B132B");
-  }
-
-  try {
-    localStorage.setItem("aihub_theme", theme);
-  } catch {}
-}
-
-let savedTheme = "dark";
-
-try {
-  savedTheme = localStorage.getItem("aihub_theme") || "dark";
-} catch {}
-
-applyTheme(savedTheme);
-
-themeToggle.addEventListener("click", () => {
-  applyTheme(
-    document.body.classList.contains("light-theme") ? "dark" : "light"
-  );
-});
-
-// CHAT STORAGE
-function readChats() {
-  try {
-    return JSON.parse(localStorage.getItem("aihub_chats") || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function persist() {
-  try {
-    localStorage.setItem("aihub_chats", JSON.stringify(chats));
-  } catch {
-    showToast("Could not save chats in this browser.");
-  }
-}
-
-function id() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
-
-function showToast(text) {
-  toastEl.textContent = text;
-  toastEl.classList.add("show");
-
-  clearTimeout(showToast.timer);
-  showToast.timer = setTimeout(() => {
-    toastEl.classList.remove("show");
-  }, 3000);
-}
-
-function escapeHtml(text) {
-  return String(text).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  }[c]));
-}
-
-function currentChat() {
-  return chats.find((c) => c.id === activeChatId);
-}
-
-// CHAT HISTORY
-function renderHistory() {
-  historyList.innerHTML = "";
-
-  if (!chats.length) {
-    historyList.innerHTML =
-      '<div class="empty-history">Your saved conversations will appear here.</div>';
-    return;
-  }
-
-  chats.slice().sort((a, b) => b.updated - a.updated).forEach((chat) => {
-    const btn = document.createElement("button");
-
-    btn.className =
-      "history-item" + (chat.id === activeChatId ? " active" : "");
-
-    btn.innerHTML =
-      `<span>▤</span><span>${escapeHtml(chat.title || "New chat")}</span>`;
-
-    btn.title = chat.title || "New chat";
-    btn.addEventListener("click", () => loadChat(chat.id));
-
-    historyList.appendChild(btn);
-  });
-}
-
-// DISPLAY MESSAGES
-function renderMessages() {
-  const chat = currentChat();
-
-  messagesEl.innerHTML = "";
-
-  const hasMessages = !!chat && chat.messages.length > 0;
-  welcomeEl.hidden = hasMessages;
-
-  if (!hasMessages) return;
-
-  chat.messages.forEach((msg) => {
-    const item = document.createElement("article");
-
-    item.className =
-      "message " + (msg.role === "user" ? "user" : "assistant");
-
-    const avatar = msg.role === "user" ? "HS" : "✦";
-    const body = document.createElement("div");
-    body.className = "message-body";
-
-    const avatarEl = document.createElement("div");
-    avatarEl.className = "message-avatar";
-    avatarEl.textContent = avatar;
-
-    if (msg.role === "assistant") {
-      const label = document.createElement("div");
-      label.className = "message-label";
-      label.textContent = "AI HUB";
-      body.appendChild(label);
-    }
-
-    if (msg.image) {
-      const img = document.createElement("img");
-      img.src = msg.image;
-      img.alt = "AI-generated image";
-      img.style.maxWidth = "100%";
-      img.style.height = "auto";
-      img.style.borderRadius = "12px";
-      img.style.display = "block";
-      img.style.marginTop = "8px";
-      body.appendChild(img);
+      setTimeout(() => {
+        toast.classList.remove("show");
+      }, 3000);
     } else {
-      const content = document.createElement("div");
-      content.textContent = msg.content || "";
-      content.style.whiteSpace = "pre-wrap";
-      body.appendChild(content);
+      alert(message);
     }
-
-    if (msg.loading) {
-      const status = document.createElement("div");
-      status.className = "demo-note";
-      status.textContent = "Please wait...";
-      body.appendChild(status);
-    }
-
-    item.append(avatarEl, body);
-    messagesEl.appendChild(item);
-  });
-
-  requestAnimationFrame(() => {
-    const area = $("#chatArea");
-    if (area) area.scrollTop = area.scrollHeight;
-  });
-}
-
-// CHAT MANAGEMENT
-function newChat() {
-  activeChatId = null;
-  messagesEl.innerHTML = "";
-  welcomeEl.hidden = false;
-  renderHistory();
-  promptInput.focus();
-  closeSidebar();
-}
-
-function loadChat(chatId) {
-  activeChatId = chatId;
-  renderHistory();
-  renderMessages();
-  closeSidebar();
-}
-
-function ensureChat(firstMessage) {
-  let chat = currentChat();
-
-  if (!chat) {
-    chat = {
-      id: id(),
-      title: firstMessage.slice(0, 38) || "New chat",
-      messages: [],
-      updated: Date.now()
-    };
-
-    chats.push(chat);
-    activeChatId = chat.id;
   }
 
-  return chat;
-}
-
-// REAL AI CHAT
-async function sendMessage(text) {
-  const clean = text.trim();
-  if (!clean) return;
-
-  const chat = ensureChat(clean);
-  const chatId = chat.id;
-  const requestId = id();
-
-  chat.messages.push({
-    role: "user",
-    content: clean
-  });
-
-  chat.messages.push({
-    role: "assistant",
-    content: "AI is thinking...",
-    loading: true,
-    requestId
-  });
-
-  chat.updated = Date.now();
-
-  if (chat.messages.length === 2) {
-    chat.title = clean.slice(0, 38);
+  // Find the best available chat display container.
+  function getChatContainer() {
+    return (
+      chatContainer ||
+      $("#chat") ||
+      $(".chat-messages") ||
+      $(".messages") ||
+      document.body
+    );
   }
 
-  persist();
-  renderHistory();
-  renderMessages();
+  // Add a chat message to the page.
+  function addMessage(text, sender = "assistant") {
+    const container = getChatContainer();
+    const message = document.createElement("div");
 
-  promptInput.value = "";
-  promptInput.style.height = "auto";
+    message.className = `message ${sender}-message`;
+    message.style.whiteSpace = "pre-wrap";
+    message.style.overflowWrap = "anywhere";
 
-  try {
-    const response = await fetch(`${AI_API}/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ message: clean })
+    const label = document.createElement("strong");
+    label.textContent =
+      sender === "user" ? "You: " : "AI HUB: ";
+
+    const content = document.createElement("span");
+    content.textContent = text;
+
+    message.append(label, content);
+    container.appendChild(message);
+
+    return message;
+  }
+
+  // Talk to the real AI backend.
+  async function sendMessage(message) {
+    const text = String(message || "").trim();
+
+    if (!text) return;
+
+    addMessage(text, "user");
+
+    const loading = addMessage("Thinking...", "assistant");
+
+    try {
+      const response = await fetch(`${AI_API}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ message: text })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || `Request failed (${response.status})`
+        );
+      }
+
+      const answer =
+        data.response ||
+        data.reply ||
+        data.result ||
+        data.text;
+
+      if (!answer) {
+        throw new Error("AI ne empty response diya.");
+      }
+
+      loading.querySelector("span").textContent = answer;
+    } catch (error) {
+      loading.querySelector("span").textContent =
+        `Error: ${error.message}`;
+
+      console.error("Chat error:", error);
+    }
+  }
+
+  // Download a generated image.
+  function downloadImage(imageUrl, filename = "ai-hub-image.png") {
+    const link = document.createElement("a");
+
+    link.href = imageUrl;
+    link.download = filename;
+    link.style.display = "none";
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  // Generate an image and display a Download button.
+  async function generateImage(promptText) {
+    const text = String(promptText || "").trim();
+
+    if (!text) {
+      showToast("Pehle image ka prompt likho.");
+      return;
+    }
+
+    const container = getChatContainer();
+    const result = document.createElement("div");
+
+    result.className = "message assistant-message image-result";
+    result.style.margin = "16px 0";
+    result.style.padding = "12px";
+    result.style.borderRadius = "12px";
+
+    const title = document.createElement("p");
+    title.textContent = "🎨 Image generate ho rahi hai...";
+    result.appendChild(title);
+
+    container.appendChild(result);
+
+    try {
+      const response = await fetch(`${AI_API}/image`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ prompt: text })
+      });
+
+      if (!response.ok) {
+        let errorMessage = `Request failed (${response.status})`;
+
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (_) {}
+
+        throw new Error(errorMessage);
+      }
+
+      const contentType =
+        response.headers.get("content-type") || "";
+
+      let imageUrl;
+      let data;
+
+      if (contentType.includes("application/json")) {
+        data = await response.json();
+
+        if (data.image) {
+          imageUrl = data.image.startsWith("data:")
+            ? data.image
+            : `data:image/png;base64,${data.image}`;
+        } else if (data.url) {
+          imageUrl = data.url;
+        } else {
+          throw new Error(
+            data.error || "Response mein image nahi mili."
+          );
+        }
+      } else {
+        const blob = await response.blob();
+        imageUrl = URL.createObjectURL(blob);
+      }
+
+      title.textContent = "✅ Tumhari image ready hai!";
+
+      const image = document.createElement("img");
+      image.src = imageUrl;
+      image.alt = text;
+      image.style.display = "block";
+      image.style.width = "100%";
+      image.style.maxWidth = "600px";
+      image.style.height = "auto";
+      image.style.borderRadius = "12px";
+      image.style.margin = "12px 0";
+
+      result.appendChild(image);
+
+      // Download button.
+      const downloadBtn = document.createElement("a");
+      downloadBtn.href = imageUrl;
+      downloadBtn.download = "ai-hub-image.png";
+      downloadBtn.textContent = "⬇ Download Image";
+      downloadBtn.setAttribute("role", "button");
+
+      downloadBtn.style.display = "inline-block";
+      downloadBtn.style.padding = "12px 18px";
+      downloadBtn.style.marginTop = "8px";
+      downloadBtn.style.borderRadius = "8px";
+      downloadBtn.style.background = "#2563eb";
+      downloadBtn.style.color = "#ffffff";
+      downloadBtn.style.textDecoration = "none";
+      downloadBtn.style.fontWeight = "bold";
+      downloadBtn.style.cursor = "pointer";
+
+      downloadBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+
+        // Use the image's actual URL/data URL.
+        downloadImage(imageUrl, "ai-hub-image.png");
+      });
+
+      result.appendChild(downloadBtn);
+
+      const promptLabel = document.createElement("p");
+      promptLabel.textContent = `Prompt: ${text}`;
+      promptLabel.style.fontSize = "13px";
+      promptLabel.style.opacity = "0.8";
+      result.appendChild(promptLabel);
+
+    } catch (error) {
+      title.textContent = `❌ Image generate nahi hui: ${error.message}`;
+      console.error("Image generation error:", error);
+    }
+  }
+
+  // Chat form submission.
+  if (chatForm && chatInput) {
+    chatForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      const text = chatInput.value.trim();
+
+      if (!text) return;
+
+      chatInput.value = "";
+      sendMessage(text);
     });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || `Request failed (${response.status})`);
-    }
-
-    if (typeof data.reply !== "string") {
-      throw new Error("The AI returned an empty response.");
-    }
-
-    const latest = chats.find((c) => c.id === chatId);
-    if (!latest) return;
-
-    const index = latest.messages.findIndex(
-      (m) => m.requestId === requestId
-    );
-
-    if (index === -1) return;
-
-    latest.messages[index] = {
-      role: "assistant",
-      content: data.reply
-    };
-
-    latest.updated = Date.now();
-    persist();
-
-    if (activeChatId === chatId) renderMessages();
-    renderHistory();
-  } catch (error) {
-    const latest = chats.find((c) => c.id === chatId);
-    if (!latest) return;
-
-    const index = latest.messages.findIndex(
-      (m) => m.requestId === requestId
-    );
-
-    if (index === -1) return;
-
-    latest.messages[index] = {
-      role: "assistant",
-      content: `AI request failed: ${error.message}. Please try again.`
-    };
-
-    latest.updated = Date.now();
-    persist();
-
-    if (activeChatId === chatId) renderMessages();
-    renderHistory();
-
-    console.error("AI chat error:", error);
-  }
-}
-
-// CHAT FORM
-chatForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  sendMessage(promptInput.value);
-});
-
-promptInput.addEventListener("input", () => {
-  promptInput.style.height = "auto";
-  promptInput.style.height =
-    Math.min(promptInput.scrollHeight, 180) + "px";
-});
-
-promptInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    chatForm.requestSubmit();
-  }
-});
-
-// NEW CHAT AND CLEAR HISTORY
-$("#newChat").addEventListener("click", newChat);
-
-$("#clearHistory").addEventListener("click", () => {
-  if (!chats.length) {
-    showToast("No saved chats to clear.");
-    return;
   }
 
-  if (confirm("Delete all saved chats from this browser?")) {
-    chats = [];
-    activeChatId = null;
-    persist();
-    renderHistory();
-    renderMessages();
-    welcomeEl.hidden = false;
-    showToast("Chat history cleared.");
-  }
-});
+  // Support common send-button IDs if no form is used.
+  const sendButton =
+    $("#sendBtn") ||
+    $("#sendButton") ||
+    $("#sendMessage");
 
-// SUGGESTIONS
-document.querySelectorAll(".suggestion").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    sendMessage(btn.dataset.prompt || "");
-  });
-});
+  if (sendButton && !chatForm) {
+    sendButton.addEventListener("click", () => {
+      if (!chatInput) return;
 
-// IMAGE GENERATION
-async function generateImage(prompt) {
-  const clean = prompt.trim();
+      const text = chatInput.value.trim();
 
-  if (!clean) {
-    showToast("Enter an image description first.");
-    return;
-  }
+      if (!text) return;
 
-  if (clean.length > 1500) {
-    showToast("Keep the image prompt under 1500 characters.");
-    return;
-  }
-
-  const chat = ensureChat(`Image: ${clean}`);
-  const chatId = chat.id;
-  const requestId = id();
-
-  chat.messages.push({
-    role: "user",
-    content: `Generate an image: ${clean}`
-  });
-
-  chat.messages.push({
-    role: "assistant",
-    content: "Creating your image...",
-    loading: true,
-    requestId
-  });
-
-  chat.updated = Date.now();
-  persist();
-  renderHistory();
-  renderMessages();
-
-  try {
-    const response = await fetch(`${AI_API}/image`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ prompt: clean })
+      chatInput.value = "";
+      sendMessage(text);
     });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || `Request failed (${response.status})`);
-    }
-
-    if (
-      typeof data.image !== "string" ||
-      !data.image.startsWith("data:image/")
-    ) {
-      throw new Error("The image model returned no valid image.");
-    }
-
-    const latest = chats.find((c) => c.id === chatId);
-    if (!latest) return;
-
-    const index = latest.messages.findIndex(
-      (m) => m.requestId === requestId
-    );
-
-    if (index === -1) return;
-
-    latest.messages[index] = {
-      role: "assistant",
-      content: "Here is your generated image.",
-      image: data.image
-    };
-
-    latest.updated = Date.now();
-    persist();
-
-    if (activeChatId === chatId) renderMessages();
-    renderHistory();
-
-    showToast("Image generated successfully!");
-  } catch (error) {
-    const latest = chats.find((c) => c.id === chatId);
-    if (!latest) return;
-
-    const index = latest.messages.findIndex(
-      (m) => m.requestId === requestId
-    );
-
-    if (index !== -1) {
-      latest.messages[index] = {
-        role: "assistant",
-        content: `Image generation failed: ${error.message}`
-      };
-    }
-
-    latest.updated = Date.now();
-    persist();
-
-    if (activeChatId === chatId) renderMessages();
-
-    console.error("Image generation error:", error);
-    showToast("Image generation failed. Check the error message.");
   }
-}
 
-// IMAGE BUTTON: OPEN PROMPT DIALOG
-$("#imageIdeaBtn").addEventListener("click", () => {
-  const idea = prompt("What image would you like to create?");
+  // Image generation button.
+  if (imageButton) {
+    imageButton.addEventListener("click", () => {
+      const idea = window.prompt(
+        "What image would you like to create?"
+      );
 
-  if (idea && idea.trim()) {
-    generateImage(idea);
+      if (idea && idea.trim()) {
+        generateImage(idea);
+      }
+    });
   }
+
+  // Theme toggle.
+  const themeButton =
+    $("#themeToggle") ||
+    $("#themeBtn");
+
+  if (themeButton) {
+    themeButton.addEventListener("click", () => {
+      document.body.classList.toggle("dark-mode");
+      document.body.classList.toggle("dark");
+    });
+  }
+
+  console.log("AI HUB initialized.");
 });
-
-// SIDEBAR
-$("#openSidebar").addEventListener("click", () => {
-  $("#sidebar").classList.add("open");
-});
-
-$("#closeSidebar").addEventListener("click", closeSidebar);
-
-function closeSidebar() {
-  $("#sidebar").classList.remove("open");
-}
-
-// LANGUAGE SELECTOR
-$("#languageSelect").addEventListener("change", () => {
-  showToast("Language preference updated.");
-});
-
-// PWA INSTALL
-window.addEventListener("beforeinstallprompt", (e) => {
-  e.preventDefault();
-  installPrompt = e;
-  $("#installBtn").hidden = false;
-});
-
-$("#installBtn").addEventListener("click", async () => {
-  if (!installPrompt) return;
-
-  installPrompt.prompt();
-  await installPrompt.userChoice;
-
-  installPrompt = null;
-  $("#installBtn").hidden = true;
-});
-
-// SERVICE WORKER
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
-  });
-}
-
-// INITIALIZE
-renderHistory();
-activeChatId = null;
-renderHistory();

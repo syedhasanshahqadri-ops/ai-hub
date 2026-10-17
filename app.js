@@ -81,7 +81,6 @@ function showToast(text) {
   toastEl.classList.add("show");
 
   clearTimeout(showToast.timer);
-
   showToast.timer = setTimeout(() => {
     toastEl.classList.remove("show");
   }, 3000);
@@ -101,7 +100,7 @@ function currentChat() {
   return chats.find((c) => c.id === activeChatId);
 }
 
-// CHAT HISTORY SIDEBAR
+// CHAT HISTORY
 function renderHistory() {
   historyList.innerHTML = "";
 
@@ -111,27 +110,23 @@ function renderHistory() {
     return;
   }
 
-  chats
-    .slice()
-    .sort((a, b) => b.updated - a.updated)
-    .forEach((chat) => {
-      const btn = document.createElement("button");
+  chats.slice().sort((a, b) => b.updated - a.updated).forEach((chat) => {
+    const btn = document.createElement("button");
 
-      btn.className =
-        "history-item" + (chat.id === activeChatId ? " active" : "");
+    btn.className =
+      "history-item" + (chat.id === activeChatId ? " active" : "");
 
-      btn.innerHTML =
-        `<span>▤</span><span>${escapeHtml(chat.title || "New chat")}</span>`;
+    btn.innerHTML =
+      `<span>▤</span><span>${escapeHtml(chat.title || "New chat")}</span>`;
 
-      btn.title = chat.title || "New chat";
+    btn.title = chat.title || "New chat";
+    btn.addEventListener("click", () => loadChat(chat.id));
 
-      btn.addEventListener("click", () => loadChat(chat.id));
-
-      historyList.appendChild(btn);
-    });
+    historyList.appendChild(btn);
+  });
 }
 
-// RENDER MESSAGES
+// DISPLAY MESSAGES
 function renderMessages() {
   const chat = currentChat();
 
@@ -149,25 +144,45 @@ function renderMessages() {
       "message " + (msg.role === "user" ? "user" : "assistant");
 
     const avatar = msg.role === "user" ? "HS" : "✦";
+    const body = document.createElement("div");
+    body.className = "message-body";
 
-    let contentHtml = "";
+    const avatarEl = document.createElement("div");
+    avatarEl.className = "message-avatar";
+    avatarEl.textContent = avatar;
 
-    if (msg.image) {
-      contentHtml =
-        `<img src="${escapeHtml(msg.image)}" alt="AI generated image" ` +
-        `style="display:block;max-width:100%;height:auto;border-radius:12px;margin-top:8px;">`;
-    } else {
-      contentHtml = escapeHtml(msg.content || "").replace(/\n/g, "<br>");
+    if (msg.role === "assistant") {
+      const label = document.createElement("div");
+      label.className = "message-label";
+      label.textContent = "AI HUB";
+      body.appendChild(label);
     }
 
-    item.innerHTML =
-      `<div class="message-avatar">${avatar}</div>` +
-      `<div class="message-body">` +
-      (msg.role === "assistant" ? '<div class="message-label">AI HUB</div>' : "") +
-      contentHtml +
-      (msg.loading ? '<div class="demo-note">Please wait...</div>' : "") +
-      `</div>`;
+    if (msg.image) {
+      const img = document.createElement("img");
+      img.src = msg.image;
+      img.alt = "AI-generated image";
+      img.style.maxWidth = "100%";
+      img.style.height = "auto";
+      img.style.borderRadius = "12px";
+      img.style.display = "block";
+      img.style.marginTop = "8px";
+      body.appendChild(img);
+    } else {
+      const content = document.createElement("div");
+      content.textContent = msg.content || "";
+      content.style.whiteSpace = "pre-wrap";
+      body.appendChild(content);
+    }
 
+    if (msg.loading) {
+      const status = document.createElement("div");
+      status.className = "demo-note";
+      status.textContent = "Please wait...";
+      body.appendChild(status);
+    }
+
+    item.append(avatarEl, body);
     messagesEl.appendChild(item);
   });
 
@@ -226,18 +241,18 @@ async function sendMessage(text) {
     content: clean
   });
 
-  chat.updated = Date.now();
-
-  if (chat.messages.length === 1) {
-    chat.title = clean.slice(0, 38);
-  }
-
   chat.messages.push({
     role: "assistant",
     content: "AI is thinking...",
     loading: true,
     requestId
   });
+
+  chat.updated = Date.now();
+
+  if (chat.messages.length === 2) {
+    chat.title = clean.slice(0, 38);
+  }
 
   persist();
   renderHistory();
@@ -252,9 +267,7 @@ async function sendMessage(text) {
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        message: clean
-      })
+      body: JSON.stringify({ message: clean })
     });
 
     const data = await response.json();
@@ -264,19 +277,19 @@ async function sendMessage(text) {
     }
 
     if (typeof data.reply !== "string") {
-      throw new Error("The AI response was empty or invalid.");
+      throw new Error("The AI returned an empty response.");
     }
 
     const latest = chats.find((c) => c.id === chatId);
     if (!latest) return;
 
-    const pendingIndex = latest.messages.findIndex(
+    const index = latest.messages.findIndex(
       (m) => m.requestId === requestId
     );
 
-    if (pendingIndex === -1) return;
+    if (index === -1) return;
 
-    latest.messages[pendingIndex] = {
+    latest.messages[index] = {
       role: "assistant",
       content: data.reply
     };
@@ -290,17 +303,15 @@ async function sendMessage(text) {
     const latest = chats.find((c) => c.id === chatId);
     if (!latest) return;
 
-    const pendingIndex = latest.messages.findIndex(
+    const index = latest.messages.findIndex(
       (m) => m.requestId === requestId
     );
 
-    if (pendingIndex === -1) return;
+    if (index === -1) return;
 
-    latest.messages[pendingIndex] = {
+    latest.messages[index] = {
       role: "assistant",
-      content:
-        `Sorry, AI request failed: ${error.message}. ` +
-        "Please try again."
+      content: `AI request failed: ${error.message}. Please try again.`
     };
 
     latest.updated = Date.now();
@@ -309,7 +320,7 @@ async function sendMessage(text) {
     if (activeChatId === chatId) renderMessages();
     renderHistory();
 
-    console.error("AI chat request failed:", error);
+    console.error("AI chat error:", error);
   }
 }
 
@@ -332,10 +343,9 @@ promptInput.addEventListener("keydown", (e) => {
   }
 });
 
-// NEW CHAT
+// NEW CHAT AND CLEAR HISTORY
 $("#newChat").addEventListener("click", newChat);
 
-// CLEAR HISTORY
 $("#clearHistory").addEventListener("click", () => {
   if (!chats.length) {
     showToast("No saved chats to clear.");
@@ -345,17 +355,15 @@ $("#clearHistory").addEventListener("click", () => {
   if (confirm("Delete all saved chats from this browser?")) {
     chats = [];
     activeChatId = null;
-
     persist();
     renderHistory();
     renderMessages();
-
     welcomeEl.hidden = false;
     showToast("Chat history cleared.");
   }
 });
 
-// SUGGESTION BUTTONS
+// SUGGESTIONS
 document.querySelectorAll(".suggestion").forEach((btn) => {
   btn.addEventListener("click", () => {
     sendMessage(btn.dataset.prompt || "");
@@ -367,16 +375,16 @@ async function generateImage(prompt) {
   const clean = prompt.trim();
 
   if (!clean) {
-    showToast("Please enter an image idea first.");
+    showToast("Enter an image description first.");
     return;
   }
 
   if (clean.length > 1500) {
-    showToast("Please keep your image prompt under 1500 characters.");
+    showToast("Keep the image prompt under 1500 characters.");
     return;
   }
 
-  const chat = ensureChat(clean);
+  const chat = ensureChat(`Image: ${clean}`);
   const chatId = chat.id;
   const requestId = id();
 
@@ -393,7 +401,6 @@ async function generateImage(prompt) {
   });
 
   chat.updated = Date.now();
-
   persist();
   renderHistory();
   renderMessages();
@@ -404,9 +411,7 @@ async function generateImage(prompt) {
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        prompt: clean
-      })
+      body: JSON.stringify({ prompt: clean })
     });
 
     const data = await response.json();
@@ -415,21 +420,23 @@ async function generateImage(prompt) {
       throw new Error(data.error || `Request failed (${response.status})`);
     }
 
-    if (typeof data.image !== "string" ||
-        !data.image.startsWith("data:image/")) {
-      throw new Error("The image response was empty or invalid.");
+    if (
+      typeof data.image !== "string" ||
+      !data.image.startsWith("data:image/")
+    ) {
+      throw new Error("The image model returned no valid image.");
     }
 
     const latest = chats.find((c) => c.id === chatId);
     if (!latest) return;
 
-    const pendingIndex = latest.messages.findIndex(
+    const index = latest.messages.findIndex(
       (m) => m.requestId === requestId
     );
 
-    if (pendingIndex === -1) return;
+    if (index === -1) return;
 
-    latest.messages[pendingIndex] = {
+    latest.messages[index] = {
       role: "assistant",
       content: "Here is your generated image.",
       image: data.image
@@ -441,33 +448,35 @@ async function generateImage(prompt) {
     if (activeChatId === chatId) renderMessages();
     renderHistory();
 
-    showToast("Image generated!");
+    showToast("Image generated successfully!");
   } catch (error) {
     const latest = chats.find((c) => c.id === chatId);
     if (!latest) return;
 
-    const pendingIndex = latest.messages.findIndex(
+    const index = latest.messages.findIndex(
       (m) => m.requestId === requestId
     );
 
-    if (pendingIndex !== -1) {
-      latest.messages[pendingIndex] = {
+    if (index !== -1) {
+      latest.messages[index] = {
         role: "assistant",
         content: `Image generation failed: ${error.message}`
       };
     }
 
+    latest.updated = Date.now();
     persist();
 
     if (activeChatId === chatId) renderMessages();
 
-    console.error("Image generation failed:", error);
-    showToast("Could not generate image. Check AI usage limits.");
+    console.error("Image generation error:", error);
+    showToast("Image generation failed. Check the error message.");
   }
 }
 
+// IMAGE BUTTON: OPEN PROMPT DIALOG
 $("#imageIdeaBtn").addEventListener("click", () => {
-  const idea = prompt("Describe the image you want to create:");
+  const idea = prompt("What image would you like to create?");
 
   if (idea && idea.trim()) {
     generateImage(idea);
@@ -516,9 +525,5 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 
 // INITIALIZE
 renderHistory();
-
-if (chats.length) {
-  // Open a fresh welcome screen while retaining saved conversations.
-  activeChatId = null;
-  renderHistory();
-}
+activeChatId = null;
+renderHistory();

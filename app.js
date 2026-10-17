@@ -13,6 +13,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const themeButton = $("#themeToggle");
   const languageSelect = $("#languageSelect");
   const imageButton = $("#imageIdeaBtn");
+  const sidebar = $("#sidebar");
 
   let conversations = [];
   let activeChatId = null;
@@ -41,7 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // -----------------------------
-  // Theme: matches styles.css
+  // Theme
   // -----------------------------
 
   function updateThemeButton() {
@@ -57,10 +58,6 @@ document.addEventListener("DOMContentLoaded", () => {
       "aria-label",
       isLight ? "Switch to dark theme" : "Switch to light theme"
     );
-
-    themeButton.title = isLight
-      ? "Switch to dark theme"
-      : "Switch to light theme";
   }
 
   function setTheme(isLight) {
@@ -90,14 +87,17 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // -----------------------------
-  // Chat helpers
+  // UI helpers
   // -----------------------------
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
       const area = $("#chatArea");
       if (area) area.scrollTop = area.scrollHeight;
-      if (messages) messages.scrollIntoView({ block: "end", behavior: "smooth" });
+      if (messages) messages.scrollIntoView({
+        block: "end",
+        behavior: "smooth"
+      });
     });
   }
 
@@ -128,7 +128,7 @@ document.addEventListener("DOMContentLoaded", () => {
     content.className = "message-text";
     content.style.whiteSpace = "pre-wrap";
     content.style.overflowWrap = "anywhere";
-    content.textContent = text;
+    content.textContent = text || "";
 
     body.append(label, content);
     row.append(avatar, body);
@@ -136,44 +136,8 @@ document.addEventListener("DOMContentLoaded", () => {
     return { row, content, body };
   }
 
-  function addMessage(role, text) {
-    hideWelcome();
-
-    const item = createMessageElement(role, text);
-    messages.appendChild(item.row);
-
-    if (activeChatId) {
-      const chat = conversations.find((c) => c.id === activeChatId);
-
-      if (chat) {
-        chat.messages.push({ role, text });
-        if (!chat.title && role === "user") {
-          chat.title = text.slice(0, 42);
-        }
-        saveHistory();
-        renderHistory();
-      }
-    }
-
-    scrollToBottom();
-    return item;
-  }
-
-  function newChat() {
-    activeChatId = String(Date.now()) + Math.random().toString(36).slice(2, 7);
-
-    conversations.unshift({
-      id: activeChatId,
-      title: "",
-      messages: [],
-      updated: Date.now()
-    });
-
-    messages.replaceChildren();
-    showWelcome();
-    renderHistory();
-    saveHistory();
-    chatInput?.focus();
+  function getActiveChat() {
+    return conversations.find((chat) => chat.id === activeChatId);
   }
 
   function saveHistory() {
@@ -184,26 +148,55 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function loadHistory() {
-    try {
-      const stored = JSON.parse(localStorage.getItem("ai-hub-chats") || "[]");
+  function addHistoryMessage(role, text) {
+    const chat = getActiveChat();
+    if (!chat) return null;
 
-      if (Array.isArray(stored)) {
-        conversations = stored.filter(
-          (c) => c && typeof c.id === "string" && Array.isArray(c.messages)
-        );
-      }
-    } catch (_) {
-      conversations = [];
+    const entry = { role, text: String(text || "") };
+    chat.messages.push(entry);
+    chat.updated = Date.now();
+
+    if (!chat.title && role === "user") {
+      chat.title = entry.text.slice(0, 42) || "New chat";
     }
 
+    saveHistory();
     renderHistory();
+    return entry;
+  }
 
-    if (conversations.length) {
-      openChat(conversations[0].id);
-    } else {
-      newChat();
-    }
+  function addMessage(role, text) {
+    hideWelcome();
+
+    const item = createMessageElement(role, text);
+    messages.appendChild(item.row);
+
+    addHistoryMessage(role, text);
+    scrollToBottom();
+
+    return item;
+  }
+
+  // -----------------------------
+  // Chat history
+  // -----------------------------
+
+  function newChat() {
+    activeChatId =
+      String(Date.now()) + Math.random().toString(36).slice(2, 7);
+
+    conversations.unshift({
+      id: activeChatId,
+      title: "",
+      messages: [],
+      updated: Date.now()
+    });
+
+    messages?.replaceChildren();
+    showWelcome();
+    renderHistory();
+    saveHistory();
+    chatInput?.focus();
   }
 
   function renderHistory() {
@@ -212,7 +205,7 @@ document.addEventListener("DOMContentLoaded", () => {
     historyList.replaceChildren();
 
     const visibleChats = conversations.filter(
-      (chat) => chat.messages && chat.messages.length
+      (chat) => Array.isArray(chat.messages) && chat.messages.length
     );
 
     if (!visibleChats.length) {
@@ -244,11 +237,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function openChat(id) {
-    const chat = conversations.find((c) => c.id === id);
+    const chat = conversations.find((item) => item.id === id);
     if (!chat) return;
 
     activeChatId = id;
-    messages.replaceChildren();
+    messages?.replaceChildren();
 
     if (!chat.messages.length) {
       showWelcome();
@@ -256,7 +249,10 @@ document.addEventListener("DOMContentLoaded", () => {
       hideWelcome();
 
       chat.messages.forEach((entry) => {
-        const item = createMessageElement(entry.role, entry.text);
+        const item = createMessageElement(
+          entry.role || "assistant",
+          entry.text || ""
+        );
         messages.appendChild(item.row);
       });
     }
@@ -264,6 +260,39 @@ document.addEventListener("DOMContentLoaded", () => {
     renderHistory();
     scrollToBottom();
     closeSidebar();
+  }
+
+  function loadHistory() {
+    try {
+      const stored = JSON.parse(
+        localStorage.getItem("ai-hub-chats") || "[]"
+      );
+
+      if (Array.isArray(stored)) {
+        conversations = stored
+          .filter((chat) =>
+            chat &&
+            typeof chat.id === "string" &&
+            Array.isArray(chat.messages)
+          )
+          .map((chat) => ({
+            ...chat,
+            messages: chat.messages.filter(
+              (entry) => entry && typeof entry === "object"
+            )
+          }));
+      }
+    } catch (_) {
+      conversations = [];
+    }
+
+    renderHistory();
+
+    if (conversations.length) {
+      openChat(conversations[0].id);
+    } else {
+      newChat();
+    }
   }
 
   $("#newChat")?.addEventListener("click", newChat);
@@ -279,10 +308,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // -----------------------------
-  // Sidebar on mobile
+  // Sidebar
   // -----------------------------
-
-  const sidebar = $("#sidebar");
 
   function closeSidebar() {
     sidebar?.classList.remove("open");
@@ -299,23 +326,25 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // -----------------------------
-  // AI chat API
+  // Chat API
   // -----------------------------
 
   async function sendMessage(rawText) {
     const text = String(rawText || "").trim();
 
     if (!text || isBusy) return;
-
     if (!activeChatId) newChat();
 
     isBusy = true;
+
     const sendButton = $("#sendBtn");
     if (sendButton) sendButton.disabled = true;
 
     addMessage("user", text);
-
-    const loading = addMessage("assistant", "Thinking...");
+    const assistantEntry = addHistoryMessage("assistant", "Thinking...");
+    const loading = createMessageElement("assistant", "Thinking...");
+    messages.appendChild(loading.row);
+    scrollToBottom();
 
     try {
       const response = await fetch(`${AI_API}/chat`, {
@@ -327,16 +356,12 @@ document.addEventListener("DOMContentLoaded", () => {
         })
       });
 
-      let data;
-
-      try {
-        data = await response.json();
-      } catch (_) {
-        throw new Error("Server ne valid JSON response nahi diya.");
-      }
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data.error || `Request failed (${response.status})`);
+        throw new Error(
+          data.error || `Chat request failed (${response.status})`
+        );
       }
 
       const answer =
@@ -348,14 +373,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
       loading.content.textContent = answer;
 
-      const chat = conversations.find((c) => c.id === activeChatId);
-      if (chat && chat.messages.length) {
-        chat.messages[chat.messages.length - 1].text = answer;
+      const chat = getActiveChat();
+      if (chat && assistantEntry) {
+        assistantEntry.text = answer;
         chat.updated = Date.now();
         saveHistory();
       }
     } catch (error) {
-      loading.content.textContent = `Sorry, error aa gaya: ${error.message}`;
+      const message = `Sorry, error aa gaya: ${error.message}`;
+      loading.content.textContent = message;
+
+      const chat = getActiveChat();
+      if (chat && assistantEntry) {
+        assistantEntry.text = message;
+        saveHistory();
+      }
+
       console.error("AI chat error:", error);
     } finally {
       isBusy = false;
@@ -377,7 +410,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   chatInput?.addEventListener("input", () => {
     chatInput.style.height = "auto";
-    chatInput.style.height = `${Math.min(chatInput.scrollHeight, 180)}px`;
+    chatInput.style.height =
+      `${Math.min(chatInput.scrollHeight, 180)}px`;
   });
 
   chatInput?.addEventListener("keydown", (event) => {
@@ -388,14 +422,45 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // -----------------------------
-  // Image generation + download
+  // Image generation
   // -----------------------------
 
-  async function generateImage(promptText) {
-    const text = String(promptText || "").trim();
+  function saveImageHistory(prompt) {
+    const chat = getActiveChat();
+    if (!chat) return;
 
-    if (!text) {
+    const historyText = `[Generated image] ${prompt}`;
+    const lastMessage = chat.messages[chat.messages.length - 1];
+
+    if (
+      lastMessage &&
+      lastMessage.role === "assistant" &&
+      lastMessage.isImagePending
+    ) {
+      lastMessage.text = historyText;
+      delete lastMessage.isImagePending;
+    } else {
+      chat.messages.push({
+        role: "assistant",
+        text: historyText
+      });
+    }
+
+    chat.updated = Date.now();
+    saveHistory();
+    renderHistory();
+  }
+
+  async function generateImage(promptText) {
+    const prompt = String(promptText || "").trim();
+
+    if (!prompt) {
       showToast("Pehle image ka prompt likho.");
+      return;
+    }
+
+    if (isBusy) {
+      showToast("Pehle current request complete hone do.");
       return;
     }
 
@@ -403,8 +468,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     hideWelcome();
 
-    const item = createMessageElement("assistant", "");
-    item.content.textContent = "🎨 Image generate ho rahi hai...";
+    const pendingEntry = addHistoryMessage(
+      "assistant",
+      "🎨 Image generate ho rahi hai..."
+    );
+
+    if (pendingEntry) pendingEntry.isImagePending = true;
+
+    const item = createMessageElement(
+      "assistant",
+      "🎨 Image generate ho rahi hai..."
+    );
     item.row.classList.add("image-message");
     messages.appendChild(item.row);
     scrollToBottom();
@@ -413,51 +487,71 @@ document.addEventListener("DOMContentLoaded", () => {
       const response = await fetch(`${AI_API}/image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: text })
+        body: JSON.stringify({ prompt })
       });
 
+      const contentType = response.headers.get("content-type") || "";
+
       if (!response.ok) {
-        let message = `Request failed (${response.status})`;
+        let errorMessage = `Image request failed (${response.status})`;
 
-        try {
-          const errorData = await response.json();
-          message = errorData.error || message;
-        } catch (_) {}
+        if (contentType.includes("application/json")) {
+          const errorData = await response.json().catch(() => ({}));
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } else {
+          const errorText = await response.text().catch(() => "");
+          if (errorText.trim()) errorMessage = errorText.slice(0, 250);
+        }
 
-        throw new Error(message);
+        throw new Error(errorMessage);
       }
 
-      const contentType = response.headers.get("content-type") || "";
       let imageUrl;
       let objectUrl = false;
 
       if (contentType.includes("application/json")) {
         const data = await response.json();
 
-        if (data.image) {
+        if (typeof data.image === "string" && data.image) {
           imageUrl = data.image.startsWith("data:")
             ? data.image
             : `data:image/png;base64,${data.image}`;
-        } else if (data.url) {
+        } else if (typeof data.base64 === "string" && data.base64) {
+          imageUrl = `data:image/png;base64,${data.base64}`;
+        } else if (typeof data.url === "string" && data.url) {
           imageUrl = data.url;
+        } else if (
+          data.result &&
+          typeof data.result.image === "string"
+        ) {
+          imageUrl = `data:image/png;base64,${data.result.image}`;
         } else {
-          throw new Error(data.error || "Response mein image nahi mili.");
+          throw new Error(
+            data.error || "API response mein image data ya URL nahi mili."
+          );
         }
-      } else {
+      } else if (contentType.startsWith("image/")) {
         const blob = await response.blob();
         imageUrl = URL.createObjectURL(blob);
         objectUrl = true;
+      } else {
+        throw new Error(
+          `Unsupported response type: ${contentType || "unknown"}`
+        );
       }
 
-      item.content.textContent = "";
+      item.content.replaceChildren();
 
       const card = document.createElement("div");
       card.className = "generated-image-card";
-      card.style.width = "100%";
-      card.style.maxWidth = "620px";
-      card.style.padding = "12px";
-      card.style.border = "1px solid var(--border, #34415E)";
-      card.style.borderRadius = "14px";
+      Object.assign(card.style, {
+        width: "100%",
+        maxWidth: "620px",
+        padding: "12px",
+        boxSizing: "border-box",
+        border: "1px solid var(--border, #34415E)",
+        borderRadius: "14px"
+      });
 
       const status = document.createElement("p");
       status.textContent = "✅ Tumhari image ready hai!";
@@ -465,34 +559,52 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const image = document.createElement("img");
       image.src = imageUrl;
-      image.alt = text;
-      image.style.display = "block";
-      image.style.width = "100%";
-      image.style.height = "auto";
-      image.style.borderRadius = "10px";
-      image.style.marginBottom = "12px";
+      image.alt = prompt;
+      Object.assign(image.style, {
+        display: "block",
+        width: "100%",
+        height: "auto",
+        borderRadius: "10px",
+        marginBottom: "12px"
+      });
+
+      image.addEventListener("error", () => {
+        status.textContent =
+          "Image mili, lekin display nahi ho saki. API response check karo.";
+      }, { once: true });
 
       const downloadButton = document.createElement("button");
       downloadButton.type = "button";
       downloadButton.textContent = "⬇ Download Image";
-      downloadButton.style.display = "inline-block";
-      downloadButton.style.padding = "12px 18px";
-      downloadButton.style.border = "0";
-      downloadButton.style.borderRadius = "9px";
-      downloadButton.style.background = "var(--accent, #B8FFF1)";
-      downloadButton.style.color = "var(--bg, #0B132B)";
-      downloadButton.style.fontWeight = "700";
+
+      Object.assign(downloadButton.style, {
+        display: "inline-block",
+        padding: "12px 18px",
+        border: "0",
+        borderRadius: "9px",
+        background: "var(--accent, #B8FFF1)",
+        color: "var(--bg, #0B132B)",
+        fontWeight: "700",
+        cursor: "pointer"
+      });
 
       downloadButton.addEventListener("click", async () => {
         try {
-          // Fetch the image as a blob for a reliable download.
-          const imageResponse = await fetch(imageUrl);
+          let blob;
 
-          if (!imageResponse.ok) {
-            throw new Error("Image download nahi ho saki.");
+          if (imageUrl.startsWith("data:")) {
+            const imageResponse = await fetch(imageUrl);
+            blob = await imageResponse.blob();
+          } else {
+            const imageResponse = await fetch(imageUrl);
+
+            if (!imageResponse.ok) {
+              throw new Error("Image download nahi ho saki.");
+            }
+
+            blob = await imageResponse.blob();
           }
 
-          const blob = await imageResponse.blob();
           const temporaryUrl = URL.createObjectURL(blob);
           const link = document.createElement("a");
 
@@ -502,13 +614,12 @@ document.addEventListener("DOMContentLoaded", () => {
           link.click();
           link.remove();
 
-          setTimeout(() => URL.revokeObjectURL(temporaryUrl), 1500);
+          setTimeout(() => URL.revokeObjectURL(temporaryUrl), 2000);
           showToast("Image download start ho gayi!");
         } catch (error) {
-          // For remote URLs, open the image as a fallback.
           if (/^https?:\/\//i.test(imageUrl)) {
-            window.open(imageUrl, "_blank", "noopener");
-            showToast("Image new tab mein khol di hai. Wahan se save karo.");
+            window.open(imageUrl, "_blank", "noopener,noreferrer");
+            showToast("Image new tab mein khol di hai.");
           } else {
             showToast(`Download error: ${error.message}`);
           }
@@ -516,36 +627,43 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       const promptLabel = document.createElement("p");
-      promptLabel.textContent = `Prompt: ${text}`;
-      promptLabel.style.fontSize = "12px";
-      promptLabel.style.opacity = "0.8";
-      promptLabel.style.overflowWrap = "anywhere";
-      promptLabel.style.marginBottom = "0";
+      promptLabel.textContent = `Prompt: ${prompt}`;
+      Object.assign(promptLabel.style, {
+        fontSize: "12px",
+        opacity: "0.8",
+        overflowWrap: "anywhere",
+        marginBottom: "0"
+      });
 
       card.append(status, image, downloadButton, promptLabel);
       item.content.appendChild(card);
 
-      // Store a text entry in history; images may need to be generated again
-      // when an old conversation is reopened.
-      const chat = conversations.find((c) => c.id === activeChatId);
-      if (chat) {
-        chat.messages[chat.messages.length - 1].text =
-          `[Generated image] ${text}`;
-        chat.updated = Date.now();
-        saveHistory();
-      }
+      saveImageHistory(prompt);
 
       if (objectUrl) {
-        // Keep the object URL alive while the image is displayed.
-        image.addEventListener("error", () => URL.revokeObjectURL(imageUrl), {
-          once: true
-        });
+        image.addEventListener("load", () => {
+          // Keep the object URL alive while this image is displayed.
+        }, { once: true });
       }
 
       scrollToBottom();
     } catch (error) {
-      item.content.textContent =
+      const errorMessage =
         `❌ Image generate nahi hui: ${error.message}`;
+
+      item.content.textContent = errorMessage;
+
+      const chat = getActiveChat();
+      if (chat) {
+        const lastMessage = chat.messages[chat.messages.length - 1];
+
+        if (lastMessage && lastMessage.isImagePending) {
+          lastMessage.text = errorMessage;
+          delete lastMessage.isImagePending;
+          saveHistory();
+        }
+      }
+
       console.error("Image generation error:", error);
     }
   }
@@ -564,9 +682,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   $$(".suggestion[data-prompt]").forEach((button) => {
     button.addEventListener("click", () => {
-      const promptText = button.dataset.prompt;
-      if (chatInput) chatInput.value = promptText;
-      sendMessage(promptText);
+      const prompt = button.dataset.prompt;
+      if (chatInput) chatInput.value = prompt;
+      sendMessage(prompt);
     });
   });
 
@@ -576,6 +694,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   try {
     const savedLanguage = localStorage.getItem("ai-hub-language");
+
     if (savedLanguage && languageSelect) {
       languageSelect.value = savedLanguage;
     }
@@ -590,7 +709,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // -----------------------------
-  // Installable PWA
+  // PWA install
   // -----------------------------
 
   window.addEventListener("beforeinstallprompt", (event) => {
@@ -607,15 +726,23 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    installPrompt.prompt();
-    await installPrompt.userChoice;
+    try {
+      installPrompt.prompt();
+      await installPrompt.userChoice;
+    } catch (error) {
+      console.warn("PWA install prompt error:", error);
+    }
+
     installPrompt = null;
 
     const installButton = $("#installBtn");
     if (installButton) installButton.hidden = true;
   });
 
-  // Initial setup.
+  // -----------------------------
+  // Initial setup
+  // -----------------------------
+
   loadHistory();
 
   console.log("AI HUB initialized.");

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0B132B">
+  <meta name="description" content="AI HUB — a multilingual AI workspace by Syed Hasan Shah.">
+  <title>AI HUB — by Syed Hasan Shah</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <div class="brand-mark">✦</div>
+        <div><div class="brand-name">AI HUB</div><div class="brand-sub">by Syed Hasan Shah</div></div>
+        <button class="icon-btn close-sidebar" id="closeSidebar" aria-label="Close sidebar">×</button>
+      </div>
+      <button class="new-chat" id="newChat"><span>＋</span> New chat</button>
+      <div class="side-label">YOUR SPACE</div>
+      <div class="history-list" id="historyList"></div>
+      <div class="sidebar-bottom">
+        <div class="free-pill"><span class="status-dot"></span> Free workspace</div>
+        <button class="side-action" id="installBtn" hidden>⇩ Install AI HUB</button>
+        <button class="side-action" id="clearHistory">Clear chat history</button>
+        <div class="creator-note">Built with care by<br><strong>Syed Hasan Shah</strong></div>
+      </div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="openSidebar" aria-label="Open sidebar">☰</button>
+        <div class="mobile-brand"><span class="brand-mark small">✦</span> AI HUB</div>
+        <div class="topbar-spacer"></div>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to light theme" title="Switch theme">☼ <span>Light mode</span></button>
+        <label class="language-control">
+          <span class="language-icon">文</span>
+          <select id="languageSelect" aria-label="Preferred language">
+            <option value="auto">Auto language</option>
+            <option value="en">English</option>
+            <option value="ur">Urdu</option>
+            <option value="roman">Roman Urdu</option>
+            <option value="hi">Hindi</option>
+          </select>
+        </label>
+        <button class="avatar" title="AI HUB profile">HS</button>
+      </header>
+
+      <section class="chat-area" id="chatArea">
+        <div class="welcome" id="welcome">
+          <div class="hero-orb"><span>✦</span></div>
+          <div class="eyebrow"><span class="status-dot"></span> YOUR AI WORKSPACE</div>
+          <h1>What can I help<br class="desktop-break"> you <span>figure out?</span></h1>
+          <p class="welcome-copy">Ask questions, explore ideas, learn something new, or get help with your next project.</p>
+          <div class="suggestion-grid">
+            <button class="suggestion" data-prompt="Explain a difficult topic in simple words."><span class="suggestion-icon">✧</span><span><strong>Learn something</strong><small>Explain any topic simply</small></span><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion" data-prompt="Create 5 practice MCQs with answers about world history."><span class="suggestion-icon">▤</span><span><strong>Practice MCQs</strong><small>Questions with answers</small></span><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion" data-prompt="Help me debug or write some code."><span class="suggestion-icon">{ }</span><span><strong>Write or debug code</strong><small>Build something useful</small></span><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion" data-prompt="Help me brainstorm a creative image idea."><span class="suggestion-icon">▧</span><span><strong>Explore an image idea</strong><small>Plan a visual concept</small></span><span class="suggestion-arrow">↗</span></button>
+          </div>
+        </div>
+        <div class="messages" id="messages" aria-live="polite"></div>
+      </section>
+
+      <footer class="composer-wrap">
+        <form class="composer" id="chatForm">
+          <button type="button" class="attach-btn" id="imageIdeaBtn" aria-label="Image ideas" title="Image creation is not connected yet">＋</button>
+          <textarea id="promptInput" rows="1" placeholder="Message AI HUB..." aria-label="Message AI HUB"></textarea>
+          <button class="send-btn" id="sendBtn" type="submit" aria-label="Send message">↑</button>
+        </form>
+        <div class="composer-tools"><span>AI HUB can make mistakes. Check important information.</span><span class="demo-indicator"><i></i> UI demo</span></div>
+      </footer>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>

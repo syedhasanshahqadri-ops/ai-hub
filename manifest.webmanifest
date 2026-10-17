@@ -1,0 +1,13 @@
+{
+  "name": "AI HUB by Syed Hasan Shah",
+  "short_name": "AI HUB",
+  "description": "A multilingual AI workspace.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0B132B",
+  "theme_color": "#0B132B",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

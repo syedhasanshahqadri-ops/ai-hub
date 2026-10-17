@@ -1,103 +1,36 @@
-# AI HUB — Your Smart AI Assistant
+# AI HUB — by Syed Hasan Shah
 
-**AI HUB** is a modern, responsive AI assistant web application designed to bring learning, creativity, coding, and everyday productivity together in one simple interface.
+A responsive, dark-themed AI chat **front-end prototype** using the chosen colors:
+- Aqua Foam / deep navy background: `#0B132B`
+- Cyber Teal / soft mint accent: `#B8FFF1`
 
-Built with a clean design, customizable themes, and a focus on accessibility, AI HUB aims to make AI tools easier to explore and use across desktop and mobile devices.
+## What's included
+- Responsive layout for laptop, tablet, and mobile
+- ChatGPT-inspired chat interface
+- Local chat history saved in the current browser with `localStorage`
+- New chat, clear history, language preference selector
+- Dark and light themes with preference saved in the browser
+- PWA manifest, SVG icon, and service worker for install/offline shell
+- Creator attribution response in demo mode
 
-## ✨ Features
+## Important limitation
+This package is currently a **front-end demo**, not a fully connected AI assistant. Messages are saved locally and demo replies are returned. Real AI answers, real image generation, web research, accounts, and cloud-synced chat history require a backend and connected AI services. Do not put private API keys in `app.js` or any browser-side file.
 
-- **Modern User Interface:** A clean, responsive layout designed for different screen sizes.
-- **Dark & Light Themes:** Switch between dark and light modes for a comfortable viewing experience.
-- **Chat Interface:** An organized interface for interacting with an AI assistant.
-- **Local Chat History:** Save and revisit conversations using browser storage on the same device.
-- **Multilingual Experience:** Language options designed for English, Urdu, Roman Urdu, and Hindi.
-- **Learning & Education:** A planned space for explanations, history questions, MCQs, and study assistance.
-- **Coding Assistance:** Designed to support programming questions, code explanations, and debugging workflows.
-- **Progressive Web App (PWA):** Includes a web app manifest and service worker to support installation and basic offline functionality where supported.
-- **Responsive Design:** Built to work across laptops, desktops, tablets, and mobile devices.
+## Run locally
+1. Extract the ZIP.
+2. Open a terminal in this folder.
+3. If Python is installed, run:
+   ```bash
+   python -m http.server 8000
+   ```
+4. Open `http://localhost:8000`.
 
-## 🛠️ Technologies Used
+Opening `index.html` directly works for the basic interface, but PWA/service-worker features require localhost or HTTPS.
 
-- HTML5
-- CSS3
-- Vanilla JavaScript
-- Browser Local Storage
-- Web App Manifest
-- Service Worker
+## Deploy free (static demo)
+You can deploy this folder to a static host such as Cloudflare Pages or Vercel. Free tiers have limits and terms may change.
 
-## 🚀 Getting Started
+## Next development milestone
+Add a server-side endpoint such as `/api/chat` and connect it to an AI model with an available free tier. Verify the provider's current quota, supported languages, model capabilities, and terms before choosing it. Keep credentials as server-side secrets. Add rate limiting and server-side usage caps so the project does not accidentally incur costs.
 
-### 1. Download the Project
-
-Download or clone this repository to your computer.
-
-```bash
-git clone https://github.com/YOUR-USERNAME/ai-hub.git
-```
-
-Replace `YOUR-USERNAME` with your GitHub username.
-
-### 2. Open the Project
-
-Navigate to the project folder and open `index.html` in your browser.
-
-For a better development experience, you can use a local development server, such as the Live Server extension in Visual Studio Code.
-
-### 3. Publish with GitHub Pages
-
-1. Open your repository on GitHub.
-2. Go to **Settings → Pages**.
-3. Select **Deploy from a branch**.
-4. Choose the `main` branch and the `/ (root)` folder.
-5. Click **Save**.
-6. Wait for GitHub Pages to publish your website.
-
-Your live website URL will typically look like:
-
-`https://YOUR-USERNAME.github.io/ai-hub/`
-
-## ⚠️ Current Project Status
-
-AI HUB currently serves as a frontend starter project and interface prototype.
-
-- The chat interface is not connected to a live AI model by default.
-- Actual AI-generated responses require integration with an AI model or API.
-- Image generation and live web research require additional integrations.
-- Chat history is stored locally in the user's browser and is not automatically synchronized across devices.
-- Offline availability depends on browser support, service-worker installation, and previously cached files.
-
-The project can be extended with a secure backend, AI model integration, image generation, and additional productivity tools.
-
-## 🗺️ Future Roadmap
-
-- [ ] Connect a real AI model for intelligent conversations.
-- [ ] Add AI-powered image generation.
-- [ ] Improve Urdu, Roman Urdu, Hindi, and English language support.
-- [ ] Add user accounts and optional cloud-synchronized chat history.
-- [ ] Introduce AI-powered study tools and MCQ generation.
-- [ ] Expand coding assistance and debugging features.
-- [ ] Improve accessibility, performance, and offline support.
-- [ ] Add web research capabilities through an appropriate integration.
-
-## 🔐 Security & Privacy
-
-AI HUB's current starter version stores chat history and theme preferences in browser storage. This data is not automatically uploaded to a server.
-
-If AI APIs or third-party services are integrated in the future, API credentials should be kept on a secure backend rather than exposed in frontend JavaScript.
-
-## 🤝 Contributions
-
-Suggestions, bug reports, and contributions are welcome. Feel free to open an issue or submit a pull request to help improve the project.
-
-## 📄 License
-
-A license has not yet been specified. Add a license file before distributing the project under an open-source license.
-
-## 👨‍💻 Creator
-
-**Created by Syed Hasan Shah**
-
-*AI HUB — Learn, Create, Code, and Explore.*
-
-# ai-hub
-AI HUB — Your Smart AI Assistant
+For production, add authentication and a database before promising cross-device saved chats. The browser-local history in this prototype is only saved on that same browser/device.

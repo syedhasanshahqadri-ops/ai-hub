@@ -1,6 +1,6 @@
 /* AI HUB service worker — offline shell, never caches API calls. */
-const CACHE = "ai-hub-v2";
-const SHELL = ["./", "./index.html", "./styles.css", "./config.js", "./i18n.js", "./markdown.js", "./orb.js", "./app.js", "./manifest.webmanifest", "./icon.svg"];
+const CACHE = "ai-hub-v3";
+const SHELL = ["./", "./index.html", "./styles.css", "./config.js", "./i18n.js", "./markdown.js", "./orb.js", "./app.js", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png"];
 const FONT_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com"];
 
 self.addEventListener("install", (e) => {

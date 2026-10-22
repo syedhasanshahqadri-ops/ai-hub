@@ -762,16 +762,23 @@
 
   /* ---------- install + service worker ---------- */
   let installPrompt = null;
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   function showInstall(on) { $("#installBtn").hidden = !on; $("#installBtn2").hidden = !on; }
   async function install() {
-    if (!installPrompt) return;
-    installPrompt.prompt(); try { await installPrompt.userChoice; } catch (_) {}
-    installPrompt = null; showInstall(false);
+    if (installPrompt) {
+      installPrompt.prompt(); try { await installPrompt.userChoice; } catch (_) {}
+      installPrompt = null; return;
+    }
+    const ua = navigator.userAgent, ios = /iphone|ipad|ipod/i.test(ua);
+    toast(ios
+      ? "iPhone/iPad: Safari mein Share button dabayein, phir 'Add to Home Screen' chunein."
+      : "Browser menu (\u22EE) kholein, phir 'Install app' ya 'Add to Home screen' chunein.", { duration: 9000 });
   }
-  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; showInstall(true); });
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; });
   window.addEventListener("appinstalled", () => { installPrompt = null; showInstall(false); toast("AI HUB installed"); });
   $("#installBtn").addEventListener("click", install);
   $("#installBtn2").addEventListener("click", install);
+  showInstall(!standalone);
 
   if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
     const had = !!navigator.serviceWorker.controller;

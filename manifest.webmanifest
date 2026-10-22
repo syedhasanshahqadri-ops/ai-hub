@@ -1,13 +1,19 @@
 {
   "name": "AI HUB by Syed Hasan Shah",
   "short_name": "AI HUB",
-  "description": "A multilingual AI workspace.",
+  "description": "A multilingual AI workspace: chat, learn, code and create images in English, Urdu, Roman Urdu and Hindi.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0B132B",
-  "theme_color": "#0B132B",
+  "orientation": "any",
+  "background_color": "#080E1F",
+  "theme_color": "#080E1F",
+  "categories": ["productivity", "education", "utilities"],
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "New chat", "short_name": "New chat", "url": "./", "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }] }
   ]
 }

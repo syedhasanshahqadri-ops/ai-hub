@@ -1,6 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="30" fill="#0B132B"/>
-  <rect x="8" y="8" width="112" height="112" rx="26" fill="#12203D" stroke="#B8FFF1" stroke-opacity=".3"/>
-  <path d="M64 22 73 52 103 64 73 75 64 106 53 75 24 64 53 52Z" fill="#B8FFF1"/>
-  <circle cx="64" cy="64" r="9" fill="#0B132B"/>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D4FFF7"/><stop offset="1" stop-color="#4FE3C8"/></linearGradient>
+    <radialGradient id="b" cx=".3" cy=".2" r="1"><stop offset="0" stop-color="#16264D"/><stop offset="1" stop-color="#080E1F"/></radialGradient>
+  </defs>
+  <rect width="128" height="128" fill="url(#b)"/>
+  <circle cx="64" cy="64" r="40" fill="none" stroke="#4FE3C8" stroke-opacity=".28" stroke-width="1.5"/>
+  <ellipse cx="64" cy="64" rx="40" ry="14" fill="none" stroke="#4FE3C8" stroke-opacity=".28" stroke-width="1.5" transform="rotate(-28 64 64)"/>
+  <path d="M64 30c2 17 10 28 34 34-24 6-32 17-34 34-2-17-10-28-34-34 24-6 32-17 34-34Z" fill="url(#g)"/>
 </svg>

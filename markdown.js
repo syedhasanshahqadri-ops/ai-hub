@@ -36,15 +36,20 @@
     s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
          .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>")
          .replace(/~~([^~\n]+)~~/g, "<del>$1</del>")
-         .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+         .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, function (m, t, u) { return '<a' + (/^[\u00B9\u00B2\u00B3\u2070-\u2079]+$/.test(t) ? ' class="cite"' : '') + ' href="' + u + '" target="_blank" rel="noopener noreferrer">' + t + '</a>'; })
          .replace(/(^|[\s(])(https?:\/\/[^\s<)]+[^\s<).,;:!?])/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
     return s.replace(/\u0000(\d+)\u0000/g, function (m, i) { return "<code>" + esc(codes[+i]) + "</code>"; });
   }
 
+  var PREVIEWABLE = { html: 1, htm: 1, svg: 1 };
   function codeBlock(code, lang) {
     var l = (lang || "").toLowerCase();
-    return '<div class="codeblock"><div class="code-head"><span>' + esc(l || "code") +
-      '</span><button type="button" class="code-copy" data-copy-code>Copy</button></div><pre><code>' +
+    var looksHtml = !l && /^\s*(<!doctype html|<html[\s>])/i.test(code);
+    var pv = PREVIEWABLE[l] || looksHtml;
+    return '<div class="codeblock"><div class="code-head"><span>' + esc(l || "code") + '</span><span class="code-btns">' +
+      (pv ? '<button type="button" class="code-btn run" data-preview-code>Preview</button>' : "") +
+      '<button type="button" class="code-btn" data-dl-code data-lang="' + esc(l) + '">Download</button>' +
+      '<button type="button" class="code-btn" data-copy-code>Copy</button></span></div><pre><code>' +
       highlight(code, l) + "</code></pre></div>";
   }
 

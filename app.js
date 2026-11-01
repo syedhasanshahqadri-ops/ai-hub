@@ -1,6 +1,8 @@
-/* AI HUB v2 — application logic.
+/* AI HUB v3 — application logic.
    Talks to the Cloudflare Worker in /worker (POST /chat, /image, /title, GET /health).
-   It also works with the older worker that only returned { response } JSON. */
+   v3 adds attachments (images, PDF, Word, Excel, PowerPoint, text), live web/data answers with sources,
+   deep thinking, message editing, code preview and custom instructions.
+   It still works with the older worker that only returned { response } JSON. */
 (function () {
   "use strict";
 
@@ -9,6 +11,7 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const NS = "http://www.w3.org/2000/svg";
+  const FILES = window.AIHubFiles;
 
   const KEY_CHATS = "ai-hub-chats", KEY_SETTINGS = "ai-hub-settings";
   const ACCENTS = { mint: "#4FE3C8", violet: "#8F6BFF", amber: "#FFAE3D", rose: "#FF5E93", sky: "#4DAAFF" };
@@ -92,7 +95,7 @@
 
   /* ---------- settings ---------- */
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const defaults = { theme: "system", accent: "mint", size: "md", motion: !reduce, enterSend: true, stream: true, language: "auto", apiBase: CFG.apiBase || "", collapsed: false };
+  const defaults = { theme: "system", accent: "mint", size: "md", motion: !reduce, enterSend: true, stream: true, language: "auto", apiBase: CFG.apiBase || "", collapsed: false, web: "auto", think: false, name: "", about: "" };
   const savedSettings = store.read(KEY_SETTINGS, null);
   let settings = Object.assign({}, defaults, savedSettings || {});
   if (!savedSettings) {
@@ -142,11 +145,16 @@
         }
         if (m.error) msg.error = true;
         if (m.stopped) msg.stopped = true;
+        if (Array.isArray(m.atts) && msg.role === "user") msg.atts = m.atts.filter((a) => a && a.id).slice(0, 8).map(cleanAtt);
+        if (Array.isArray(m.sources) && msg.role === "assistant") msg.sources = cleanSources(m.sources);
+        if (m.thinking && msg.role === "assistant") msg.thinking = String(m.thinking).slice(0, 20000);
         msgs.push(msg);
       });
       return { id: c.id, title: String(c.title || ""), autoTitle: !!c.autoTitle, pinned: !!c.pinned, mode: MODES.some((x) => x.id === c.mode) ? c.mode : "general", messages: msgs, created: c.created || c.updated || Date.now(), updated: c.updated || Date.now() };
     });
   }
+  const cleanAtt = (a) => ({ id: String(a.id), name: String(a.name || "file").slice(0, 120), mime: String(a.mime || ""), kind: a.kind === "image" ? "image" : "text", size: +a.size || 0, note: a.note ? String(a.note).slice(0, 120) : undefined });
+  const cleanSources = (arr) => arr.filter((x) => x && /^https?:\/\//i.test(String(x.url || ""))).slice(0, 12).map((x, i) => ({ n: +x.n || i + 1, title: String(x.title || x.url).slice(0, 140), url: String(x.url).slice(0, 600) }));
   function serialize(c) {
     return {
       id: c.id, title: c.title, autoTitle: c.autoTitle, pinned: c.pinned, mode: c.mode, created: c.created, updated: c.updated,
@@ -154,6 +162,9 @@
         const o = { id: m.id, role: m.role, text: m.text, ts: m.ts };
         if (m.error) o.error = true;
         if (m.stopped) o.stopped = true;
+        if (m.atts && m.atts.length) o.atts = m.atts.map(cleanAtt);
+        if (m.sources && m.sources.length) o.sources = cleanSources(m.sources);
+        if (m.thinking) o.thinking = m.thinking.slice(0, 20000);
         if (m.type === "image") { o.type = "image"; o.prompt = m.prompt; o.style = m.style; o.state = m.state === "error" ? "error" : "expired"; o.errorText = m.errorText; }
         return o;
       })
@@ -175,11 +186,34 @@
   function ensureChat() { let c = activeChat(); if (!c) { newChat(); c = activeChat(); } return c; }
 
   /* ---------- rendering: messages ---------- */
+  const SUP = "\u2070\u00B9\u00B2\u00B3\u2074\u2075\u2076\u2077\u2078\u2079";
+  function withCites(text, sources) {
+    if (!sources || !sources.length) return text;
+    return text.split(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)/).map((seg, i) => i % 2 ? seg : seg.replace(/\[(\d{1,2})\](?!\()/g, (m, n) => {
+      const s = sources[+n - 1];
+      return s && s.url ? "[" + String(n).replace(/\d/g, (d) => SUP[d]) + "](" + s.url.replace(/\)/g, "%29") + ")" : m;
+    })).join("");
+  }
   function paintContent(msg, el) {
     const sc = scriptOf(msg.text || "");
     el.classList.toggle("ur", sc === "ur"); el.classList.toggle("hi", sc === "hi");
-    el.innerHTML = msg.text ? MD.render(msg.text) : '<span class="typing"><i></i><i></i><i></i></span>';
+    if (msg.text) el.innerHTML = MD.render(withCites(msg.text, msg.sources));
+    else el.innerHTML = '<span class="typing"><i></i><i></i><i></i></span>' + (msg.status ? '<span class="status-line">' + MD.esc(msg.status) + "</span>" : "");
     el.classList.toggle("caret", !!msg.streaming && !!msg.text);
+  }
+  const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (_) { return "source"; } };
+  function syncExtras(msg, row) {
+    const body = row && row.querySelector(".body"), md = body && body.querySelector(".md"); if (!md) return;
+    let th = body.querySelector(".think");
+    if (msg.thinking) {
+      if (!th) { th = h("details", { class: "think" }, h("summary"), h("div", { class: "tx", dir: "auto" })); if (msg.streaming && !msg.text) th.open = true; body.insertBefore(th, md); }
+      th.querySelector(".tx").textContent = msg.thinking;
+      th.querySelector("summary").textContent = msg.streaming && !msg.text ? "Thinking…" : "Thought process";
+    } else if (th) th.remove();
+    let sr = body.querySelector(".sources");
+    if (msg.sources && msg.sources.length) {
+      if (!sr) { sr = h("div", { class: "sources" }, msg.sources.map((x) => h("a", { class: "src", href: x.url, target: "_blank", rel: "noopener noreferrer", title: x.title }, h("i", { text: String(x.n) }), h("span", { text: hostOf(x.url) + " · " + x.title })))); md.after(sr); }
+    } else if (sr) sr.remove();
   }
   function actBtn(act, ic, label) {
     return h("button", { class: "act", type: "button", "data-act": act, "aria-label": label }, icon(ic), label);
@@ -204,8 +238,10 @@
     const cls = "msg " + msg.role + (msg.error ? " err" : "") + (msg.pending ? " pending" : "") + (fresh ? " fresh" : "");
     const row = h("div", { class: cls, "data-id": msg.id });
     if (msg.role === "user") {
-      row.append(h("div", { class: "body" }, h("div", { class: "bubble", dir: "auto", text: msg.text }),
-        h("div", { class: "actions", style: "justify-content:flex-end" }, actBtn("copy", "copy", "Copy"))));
+      row.append(h("div", { class: "body" },
+        msg.atts && msg.atts.length ? h("div", { class: "bubble-atts" }, msg.atts.map(attView)) : null,
+        msg.text ? h("div", { class: "bubble", dir: "auto", text: msg.text }) : null,
+        h("div", { class: "actions", style: "justify-content:flex-end" }, actBtn("copy", "copy", "Copy"), actBtn("edit", "pencil", "Edit"))));
       return row;
     }
     const body = h("div", { class: "body" });
@@ -221,7 +257,18 @@
       }
     }
     row.append(h("div", { class: "avatar" }, icon("sparkles")), body);
+    if (msg.type !== "image") syncExtras(msg, row);
     return row;
+  }
+  function attChip(a, state) {
+    const ico = h("span", { class: "th" }, icon(a.kind === "image" ? "image" : "file"));
+    return h("div", { class: "att" + (state === "bad" ? " bad" : "") }, ico, h("span", { class: "nm" }, h("b", { text: a.name }), h("small", { text: state === "gone" ? "Not stored" : a.note || (a.size ? Math.max(1, Math.round(a.size / 1024)) + " KB" : "") })));
+  }
+  function attView(a) {
+    if (a.kind !== "image") return attChip(a);
+    const img = h("img", { class: "big", alt: a.name, loading: "lazy" });
+    FILES.store.get(a.id).then((r) => { if (r && r.data) img.src = r.data; else img.replaceWith(attChip(a, "gone")); });
+    return img;
   }
   const rowOf = (id) => messagesEl.querySelector('[data-id="' + id + '"]');
   function markLast() {
@@ -243,7 +290,7 @@
     if (paintRaf) return;
     paintRaf = requestAnimationFrame(() => {
       paintRaf = 0;
-      dirty.forEach((m) => { const r = rowOf(m.id), md = r && r.querySelector(".md"); if (md) paintContent(m, md); });
+      dirty.forEach((m) => { const r = rowOf(m.id), md = r && r.querySelector(".md"); if (md) { paintContent(m, md); syncExtras(m, r); } });
       dirty = new Set(); scrollDown();
     });
   }
@@ -342,7 +389,44 @@
 
   /* ---------- composer ---------- */
   function autosize() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 200) + "px"; }
-  function updateSend() { sendBtn.disabled = !busy && !input.value.trim(); }
+  /* attachments waiting in the composer */
+  let pending = [];
+  const readyAtts = () => pending.filter((a) => !a.busy && !a.bad);
+  function updateSend() { sendBtn.disabled = !busy && (pending.some((a) => a.busy) || !(input.value.trim() || readyAtts().length)); }
+  function renderAtts() {
+    const box = $("#atts"); box.hidden = !pending.length; box.replaceChildren();
+    pending.forEach((a) => {
+      const el = h("div", { class: "att" + (a.busy ? " busy" : "") + (a.bad ? " bad" : "") }, a.thumb ? h("img", { class: "th", src: a.thumb, alt: "" }) : h("span", { class: "th" }, a.busy ? null : icon("file")),
+        h("span", { class: "nm" }, h("b", { text: a.name }), h("small", { text: a.busy ? "Reading…" : a.note || Math.max(1, Math.round((a.size || 0) / 1024)) + " KB" })),
+        h("button", { class: "x", type: "button", "aria-label": "Remove " + a.name, onclick: () => { pending = pending.filter((x) => x !== a); if (a.id) FILES.store.del([a.id]); renderAtts(); updateSend(); } }, icon("x")));
+      box.append(el);
+    });
+    updateSend();
+  }
+  async function addFiles(list) {
+    const files = Array.from(list || []); if (!files.length) return;
+    if (pending.length + files.length > FILES.MAX_ATT) { toast("You can attach up to " + FILES.MAX_ATT + " files per message."); files.length = Math.max(0, FILES.MAX_ATT - pending.length); }
+    files.forEach(async (f) => {
+      const slot = { name: f.name || "image", size: f.size, busy: true, kind: /^image\//.test(f.type) ? "image" : "text" };
+      pending.push(slot); renderAtts();
+      try { const rec = await FILES.process(f); Object.assign(slot, rec, { busy: false }); FILES.store.put(rec); }
+      catch (err) { pending = pending.filter((x) => x !== slot); toast(err && err.message || "Couldn't read " + slot.name, { duration: 4200 }); }
+      renderAtts();
+    });
+    if (!isMobile()) input.focus();
+  }
+  const takeAtts = () => { const r = readyAtts(); pending = []; renderAtts(); return r; };
+  $("#attachBtn").addEventListener("click", () => $("#fileInput").click());
+  $("#fileInput").addEventListener("change", (e) => { addFiles(e.target.files); e.target.value = ""; });
+  input.addEventListener("paste", (e) => { const fs = e.clipboardData && e.clipboardData.files; if (fs && fs.length) { e.preventDefault(); addFiles(fs); } });
+  (function dragDrop() {
+    const zone = $("#dropzone"); let depth = 0;
+    const has = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files");
+    document.addEventListener("dragenter", (e) => { if (has(e)) { depth++; zone.hidden = false; } });
+    document.addEventListener("dragover", (e) => { if (has(e)) e.preventDefault(); });
+    document.addEventListener("dragleave", (e) => { if (has(e) && --depth <= 0) { depth = 0; zone.hidden = true; } });
+    document.addEventListener("drop", (e) => { if (!has(e)) return; e.preventDefault(); depth = 0; zone.hidden = true; addFiles(e.dataTransfer.files); });
+  })();
   function setBusy(b) {
     busy = b; sendBtn.classList.toggle("stop", b);
     sendBtn.querySelector("use").setAttribute("href", b ? "#i-stop" : "#i-send");
@@ -359,8 +443,9 @@
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     if (busy) { stopGeneration(); return; }
-    const t = input.value; if (!t.trim()) return;
-    input.value = ""; autosize(); updateSend(); send(t);
+    const t = input.value; if (!t.trim() && !readyAtts().length) return;
+    if (pending.some((a) => a.busy)) { toast("Still reading your file…"); return; }
+    input.value = ""; autosize(); send(t, takeAtts());
   });
 
   function setImageMode(on) {
@@ -371,6 +456,9 @@
     const c = ensureChat(), m = MODES.find((x) => x.id === id) || MODES[0];
     c.mode = m.id; persist(); renderChips();
     if (m.id !== "general") toast(m.name + " mode on");
+  }
+  function chip(ic, label, offLabel, onOff) {
+    return h("span", { class: "chip" }, icon(ic), label, h("button", { type: "button", "aria-label": offLabel, onclick: onOff }, icon("x")));
   }
   function renderChips() {
     const c = activeChat(), mode = (c && c.mode) || "general";
@@ -383,9 +471,11 @@
     }
     if (mode !== "general") {
       const m = MODES.find((x) => x.id === mode);
-      chipsEl.append(h("span", { class: "chip" }, icon(m.icon), m.name + " mode",
-        h("button", { type: "button", "aria-label": "Switch to General mode", onclick: () => setMode("general") }, icon("x"))));
+      chipsEl.append(chip(m.icon, m.name + " mode", "Switch to General mode", () => setMode("general")));
     }
+    if (settings.web === "on") chipsEl.append(chip("globe", "Web search on", "Back to automatic search", () => patch({ web: "auto" })));
+    if (settings.web === "off") chipsEl.append(chip("globe", "Search off", "Back to automatic search", () => patch({ web: "auto" })));
+    if (settings.think) chipsEl.append(chip("brain", "Deep thinking", "Turn off deep thinking", () => patch({ think: false })));
     input.placeholder = imageMode ? "Describe the image you want" : I18N.t(settings.language, "placeholder");
   }
 
@@ -397,8 +487,13 @@
   function openMenu() {
     const cur = (activeChat() || {}).mode || "general";
     menuEl.replaceChildren(
+      h("div", { class: "menu-label", text: "Add" }),
+      menuItem("clip", "Attach files or images", "Photos, PDF, Word, Excel, PowerPoint, code", false, () => { closeMenu(); $("#fileInput").click(); }),
       h("div", { class: "menu-label", text: "Create" }),
       menuItem("image", "Create an image", "Turn a description into a picture", imageMode, () => { setImageMode(!imageMode); closeMenu(); }),
+      h("div", { class: "menu-label", text: "Tools" }),
+      menuItem("globe", "Web search", "Always look things up live", settings.web === "on", () => { patch({ web: settings.web === "on" ? "auto" : "on" }); closeMenu(); }),
+      menuItem("brain", "Think deeper", "Slower, better on hard problems", settings.think, () => { patch({ think: !settings.think }); closeMenu(); }),
       h("div", { class: "menu-label", text: "Mode" }),
       ...MODES.map((m) => menuItem(m.icon, m.name, m.desc, cur === m.id, () => { setMode(m.id); closeMenu(); })));
     menuEl.hidden = false; toolsBtn.setAttribute("aria-expanded", "true");
@@ -430,33 +525,64 @@
     if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Couldn't reach the AI service. Check your connection and the API address in Settings, then try again.";
     return m;
   }
-  async function send(text) {
-    text = String(text || "").trim(); if (!text || busy) return;
+  const DEFAULT_ATT_PROMPT = "Please analyse the attached file(s) and tell me what is in them.";
+  const IMG_INTENT = /^\s*(?:please\s+)?(?:can you\s+|could you\s+)?(?:draw|generate|create|make|paint|design|imagine|render)\s+(?:me\s+)?(?:an?\s+|the\s+)?(?:\w+\s+){0,3}?(?:image|picture|photo|illustration|artwork|painting|wallpaper|poster|portrait|logo)\b|^\s*(?:mujhe\s+)?(?:\w+\s+){0,4}(?:ki\s+)?(?:tasveer|image|picture|photo)\s+(?:bana|banao|banayein|bana do|generate)/i;
+  const NOT_IMG = /\b(python|javascript|code|function|api|model|classif|dataset|css|html|react|sql|script|class|algorithm|training|opencv|pillow|canvas)\b/i;
+  const meta = (a) => cleanAtt(a);
+  async function send(text, atts) {
+    text = String(text || "").trim(); atts = atts || [];
+    if ((!text && !atts.length) || busy) return;
     const chat = ensureChat();
-    if (imageMode) return makeImage(chat, text);
-    addMsg(chat, { role: "user", text });
+    if (!atts.length && text) {
+      if (imageMode) return makeImage(chat, text);
+      if (IMG_INTENT.test(text) && !NOT_IMG.test(text) && text.length < 400) return makeImage(chat, text);
+    }
+    addMsg(chat, { role: "user", text: text || DEFAULT_ATT_PROMPT, atts: atts.length ? atts.map(meta) : undefined });
     const reply = addMsg(chat, { role: "assistant", text: "", pending: true });
     stick = true; scrollDown(true);
     await runReply(chat, reply);
   }
-  function buildContext(chat, reply) {
+  /** Messages sent to the Worker. Files/images are re-read from local storage so follow-up questions keep working. */
+  async function hydrate(atts, withImages) {
     const out = [];
+    for (const a of atts || []) {
+      const rec = await FILES.store.get(a.id);
+      if (!rec) { out.push({ kind: "text", name: a.name, text: "(This file is no longer stored in this browser, so its content isn't available. Ask the user to attach it again if you need it.)" }); continue; }
+      if (rec.kind === "image") { out.push(withImages ? { kind: "image", name: rec.name, data: rec.data } : { kind: "text", name: rec.name, text: "(An image the user attached earlier; it is not re-sent.)" }); continue; }
+      out.push({ kind: "text", name: rec.name, note: rec.note, text: rec.text, images: withImages && rec.images ? rec.images : undefined });
+    }
+    return out;
+  }
+  async function buildPayload(chat, reply) {
+    const list = [];
     for (const m of chat.messages) {
       if (m === reply) break;
-      if (m.type === "image" || m.error || !m.text) continue;
-      out.push({ role: m.role, content: m.text.slice(0, 6000) });
+      if (m.type === "image" || m.error || (!m.text && !(m.atts && m.atts.length))) continue;
+      list.push(m);
     }
-    return out.slice(-16);
+    const recent = list.slice(-24), out = []; let imageTurns = 0;
+    for (let i = recent.length - 1; i >= 0; i--) {
+      const m = recent[i], o = { role: m.role, content: String(m.text || "").slice(0, 6000) };
+      if (m.role === "user" && m.atts && m.atts.length) { o.attachments = await hydrate(m.atts, imageTurns < 3); if (m.atts.some((a) => a.kind === "image")) imageTurns++; }
+      out.unshift(o);
+    }
+    while (out.length && out[0].role !== "user") out.shift();
+    return out;
   }
   async function runReply(chat, reply) {
     setBusy(true); controller = new AbortController();
     reply.pending = true; reply.streaming = false; reply.error = false; reply.stopped = false; reply.text = "";
-    const ctx = buildContext(chat, reply);
+    reply.status = ""; reply.sources = null; reply.thinking = ""; reply.tools = null;
     try {
+      const ctx = await buildPayload(chat, reply);
       if (!settings.apiBase) throw new Error("No API address is set. Add it in Settings → Backend.");
       const res = await fetch(api("/chat"), {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
-        body: JSON.stringify({ message: ctx.length ? ctx[ctx.length - 1].content : "", messages: ctx, language: settings.language, mode: chat.mode || "general", stream: !!settings.stream })
+        body: JSON.stringify({
+          message: ctx.length ? ctx[ctx.length - 1].content : "", messages: ctx, language: settings.language, mode: chat.mode || "general", stream: !!settings.stream,
+          tz: (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || "", locale: navigator.language || "", search: settings.web, think: !!settings.think,
+          profile: { name: settings.name, about: settings.about }
+        })
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -469,13 +595,15 @@
         const ans = d.response || d.reply || d.result || d.text;
         if (typeof ans !== "string" || !ans.trim()) throw new Error("The AI returned an empty answer. Please try again.");
         reply.text = ans;
+        if (Array.isArray(d.sources)) reply.sources = cleanSources(d.sources);
+        if (d.thinking) reply.thinking = String(d.thinking);
       }
       if (!reply.text.trim()) throw new Error("The AI returned an empty answer. Please try again.");
     } catch (err) {
       if (err && err.name === "AbortError") { reply.stopped = true; if (!reply.text) { reply.text = "Generation stopped."; reply.error = true; } }
       else { reply.error = true; reply.text = (reply.text ? reply.text + "\n\n" : "") + friendly(err); }
     } finally {
-      reply.pending = false; reply.streaming = false; controller = null;
+      reply.pending = false; reply.streaming = false; reply.status = ""; controller = null;
       chat.updated = Date.now(); setBusy(false); replaceRow(reply); persist(); renderHistory();
       if (!reply.error && chat.autoTitle && chat.messages.length <= 2) refineTitle(chat);
     }
@@ -486,11 +614,15 @@
     const handle = (line) => {
       line = line.trim(); if (!line.startsWith("data:")) return false;
       const data = line.slice(5).trim(); if (data === "[DONE]") return true;
-      try {
-        const j = JSON.parse(data);
-        const tok = j.response != null ? j.response : (j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content) || j.token || "";
-        if (tok) { reply.text += tok; reply.streaming = true; schedulePaint(reply); }
-      } catch (_) {}
+      let j; try { j = JSON.parse(data); } catch (_) { return false; }
+      if (j.error) throw new Error(String(j.error));
+      if (j.status !== undefined) { reply.status = j.status; if (!reply.text) schedulePaint(reply); }
+      if (Array.isArray(j.sources)) { reply.sources = cleanSources(j.sources); schedulePaint(reply); }
+      if (Array.isArray(j.tools)) reply.tools = j.tools;
+      if (j.thinking) { reply.thinking = (reply.thinking || "") + j.thinking; reply.streaming = true; schedulePaint(reply); }
+      if (j.promote) { reply.text = (reply.thinking || "") + reply.text; reply.thinking = ""; schedulePaint(reply); }
+      const tok = j.response != null ? j.response : (j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content) || j.token || "";
+      if (typeof tok === "string" && tok) { reply.text += tok; reply.streaming = true; reply.status = ""; schedulePaint(reply); }
       return false;
     };
     for (;;) {
@@ -580,6 +712,10 @@
   messagesEl.addEventListener("click", (e) => {
     const cc = e.target.closest("[data-copy-code]");
     if (cc) { copyText(cc.closest(".codeblock").querySelector("code").textContent, cc); return; }
+    const pv = e.target.closest("[data-preview-code]");
+    if (pv) { openPreview(pv.closest(".codeblock").querySelector("code").textContent); return; }
+    const dl = e.target.closest("[data-dl-code]");
+    if (dl) { const lang = dl.dataset.lang || ""; download("ai-hub-code." + (CODE_EXT[lang] || "txt"), dl.closest(".codeblock").querySelector("code").textContent, "text/plain"); toast("Download started"); return; }
     const b = e.target.closest("[data-act]"); if (!b) return;
     const row = b.closest(".msg"), chat = activeChat();
     const msg = chat && row && chat.messages.find((m) => m.id === row.dataset.id); if (!msg) return;
@@ -587,6 +723,7 @@
       case "copy": copyText(msg.text, b); break;
       case "speak": speak(msg, b); break;
       case "regen": regenerate(); break;
+      case "edit": startEdit(chat, msg, row); break;
       case "img-copy": copyText(msg.prompt, b); break;
       case "img-again": if (!busy) makeImage(chat, msg.prompt, msg); break;
       case "img-dl": {
@@ -596,6 +733,41 @@
       }
     }
   });
+
+  /* ---------- edit a sent message ---------- */
+  function startEdit(chat, msg, row) {
+    if (busy) { toast("Wait for the reply to finish, or press stop."); return; }
+    const body = row.querySelector(".body"), box = h("textarea", { class: "edit-box", dir: "auto", "aria-label": "Edit message" });
+    box.value = msg.text;
+    const done = (save) => {
+      if (!save) { replaceRow(msg); return; }
+      const t = box.value.trim(); if (!t) return;
+      const idx = chat.messages.indexOf(msg); if (idx < 0) return;
+      const atts = msg.atts || [];
+      chat.messages.slice(idx).forEach((m) => { const r = rowOf(m.id); if (r) r.remove(); });
+      chat.messages.length = idx;
+      if (idx === 0 && chat.autoTitle) chat.title = "";
+      persist(); renderHistory(); markLast();
+      if (!chat.messages.length) welcomeEl.hidden = false;
+      send(t, atts);
+    };
+    box.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); done(true); } else if (e.key === "Escape") done(false); });
+    body.replaceChildren(box, h("div", { class: "edit-row" }, h("button", { class: "btn", type: "button", text: "Cancel", onclick: () => done(false) }), h("button", { class: "btn primary", type: "button", text: "Save and resend", onclick: () => done(true) })));
+    box.focus(); box.setSelectionRange(box.value.length, box.value.length);
+  }
+
+  /* ---------- code preview (sandboxed, cannot touch your chats) ---------- */
+  const CODE_EXT = { js: "js", javascript: "js", jsx: "jsx", ts: "ts", typescript: "ts", tsx: "tsx", py: "py", python: "py", html: "html", htm: "html", css: "css", json: "json", bash: "sh", sh: "sh", shell: "sh", java: "java", c: "c", cpp: "cpp", cs: "cs", go: "go", rs: "rs", rust: "rs", php: "php", sql: "sql", yaml: "yml", yml: "yml", md: "md", markdown: "md", svg: "svg", xml: "xml", kotlin: "kt", swift: "swift", ruby: "rb" };
+  const pvDlg = $("#previewDialog"), pvFrame = $("#previewFrame"); let pvHtml = "";
+  function openPreview(code) {
+    pvHtml = /^\s*<svg[\s>]/i.test(code) ? '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#fff">' + code : code;
+    if (!/<meta[^>]+viewport/i.test(pvHtml)) pvHtml = '<meta name="viewport" content="width=device-width,initial-scale=1">' + pvHtml;
+    pvFrame.srcdoc = pvHtml; pvDlg.showModal();
+  }
+  $("#pvSave").addEventListener("click", () => { download("ai-hub-preview.html", pvHtml, "text/html"); toast("Download started"); });
+  $$("[data-close]", pvDlg).forEach((b) => b.addEventListener("click", () => pvDlg.close()));
+  pvDlg.addEventListener("click", (e) => { if (e.target === pvDlg) pvDlg.close(); });
+  pvDlg.addEventListener("close", () => { pvFrame.srcdoc = ""; });
 
   /* ---------- welcome cards ---------- */
   $$(".card").forEach((card) => {
@@ -634,7 +806,9 @@
       const r = await fetch(api("/health"), { signal: ctl.signal, cache: "no-store" }); clearTimeout(t);
       let info = {}; try { info = await r.json(); } catch (_) {}
       setConn("ok", "Connected");
-      return { ok: true, msg: r.ok ? "Connected" + (info.model ? " · " + info.model : "") : "Reachable. This server has no /health route (HTTP " + r.status + "), which is fine." };
+      const short = info.model ? String(info.model).split("/").pop() : "";
+      const live = info.search ? " · live data on" + (info.search === "basic" ? " (basic search: add TAVILY_API_KEY for reliable results)" : " (" + info.search + " search)") : "";
+      return { ok: true, msg: r.ok ? "Connected" + (short ? " · " + short : "") + live : "Reachable. This server has no /health route (HTTP " + r.status + "), which is fine." };
     } catch (_) {
       clearTimeout(t); setConn("bad", "Backend unreachable");
       return { ok: false, msg: "Could not reach the server. Check the address, that the Worker is deployed, and that it allows this website's origin." };
@@ -648,7 +822,7 @@
     $$(".seg[data-setting]").forEach((seg) => $$("button", seg).forEach((b) => b.setAttribute("aria-pressed", String(settings[seg.dataset.setting] === b.dataset.v))));
     $$("#swatches .sw").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === settings.accent)));
     $("#setMotion").checked = settings.motion; $("#setEnter").checked = settings.enterSend; $("#setStream").checked = settings.stream;
-    $("#setApi").value = settings.apiBase; $("#verText").textContent = "v" + (CFG.version || "2");
+    $("#setApi").value = settings.apiBase; $("#setName").value = settings.name || ""; $("#setAbout").value = settings.about || ""; $("#verText").textContent = "v" + (CFG.version || "2");
   }
   function openSettings() { syncSettingsUI(); $("#apiStatus").textContent = ""; $("#apiStatus").className = "status"; settingsDlg.showModal(); }
   Object.keys(ACCENTS).forEach((k) => {
@@ -667,6 +841,8 @@
     return true;
   }
   $("#setApi").addEventListener("change", saveApi);
+  $("#setName").addEventListener("change", (e) => patch({ name: e.target.value.trim().slice(0, 60) }));
+  $("#setAbout").addEventListener("change", (e) => { patch({ about: e.target.value.trim().slice(0, 1200) }); toast("Custom instructions saved"); });
   $("#testApi").addEventListener("click", async () => {
     if (!saveApi()) return;
     const s = $("#apiStatus"); s.className = "status"; s.textContent = "Testing…";
@@ -677,7 +853,9 @@
 
   /* ---------- export / import ---------- */
   function chatToMarkdown(c) {
-    return "# " + titleOf(c) + "\n\n" + c.messages.map((m) => m.type === "image" ? "**AI HUB:** [Image] " + m.prompt : "**" + (m.role === "user" ? "You" : "AI HUB") + ":**\n\n" + m.text).join("\n\n---\n\n") + "\n";
+    return "# " + titleOf(c) + "\n\n" + c.messages.map((m) => m.type === "image" ? "**AI HUB:** [Image] " + m.prompt
+      : "**" + (m.role === "user" ? "You" : "AI HUB") + ":**\n\n" + (m.atts && m.atts.length ? "_Attached: " + m.atts.map((a) => a.name).join(", ") + "_\n\n" : "") + m.text +
+        (m.sources && m.sources.length ? "\n\nSources:\n" + m.sources.map((x) => "- [" + x.n + "] " + x.title + " — " + x.url).join("\n") : "")).join("\n\n---\n\n") + "\n";
   }
   function exportChat(c) {
     if (!c || !c.messages.length) { toast("This chat is empty."); return; }
@@ -703,7 +881,7 @@
   });
   $("#clearAll").addEventListener("click", () => {
     if (!confirm("Delete all saved chats from this browser? Export a backup first if you might need them.")) return;
-    chats = []; activeId = null; persist(true); newChat(); settingsDlg.close(); toast("All chats deleted");
+    chats = []; activeId = null; persist(true); FILES.store.prune(new Set()); newChat(); settingsDlg.close(); toast("All chats deleted");
   });
 
   /* ---------- command palette ---------- */
@@ -711,7 +889,10 @@
   function commands() {
     const list = [
       { g: "Chat", ic: "plus", label: "New chat", run: newChat },
+      { g: "Chat", ic: "clip", label: "Attach files or images", run: () => $("#fileInput").click() },
       { g: "Chat", ic: "image", label: imageMode ? "Turn off image mode" : "Create an image", run: () => setImageMode(!imageMode) },
+      { g: "Tools", ic: "globe", label: settings.web === "on" ? "Web search: back to Auto" : "Web search: always on", run: () => patch({ web: settings.web === "on" ? "auto" : "on" }) },
+      { g: "Tools", ic: "brain", label: settings.think ? "Turn off deep thinking" : "Turn on deep thinking", run: () => patch({ think: !settings.think }) },
       { g: "Chat", ic: "download", label: "Export this chat (Markdown)", run: () => exportChat(activeChat()) },
       { g: "Chat", ic: "trash", label: "Delete this chat", run: () => { const c = activeChat(); if (c && c.messages.length) deleteChat(c.id); else toast("Nothing to delete yet."); } },
       { g: "Appearance", ic: "sun", label: "Switch theme", run: toggleTheme }
@@ -789,6 +970,7 @@
   /* ---------- start ---------- */
   ORB.init($("#orb"));
   chats = normalizeChats(store.read(KEY_CHATS, []));
+  FILES.store.prune(new Set(chats.flatMap((c) => c.messages.flatMap((m) => (m.atts || []).map((a) => a.id)))));
   applySettings();
   newChat();
   updateSend();

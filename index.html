@@ -8,7 +8,7 @@
   <title>AI HUB — by Syed Hasan Shah</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&family=Noto+Nastaliq+Urdu:wght@400;600&family=Noto+Sans+Devanagari:wght@400;600&display=swap" rel="stylesheet">
@@ -66,6 +66,10 @@
     <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/></symbol>
     <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></symbol>
     <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+    <symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M12 5v13"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m6 4 14 8-14 8Z"/></symbol>
+    <symbol id="i-ext" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></symbol>
   </defs>
 </svg>
@@ -122,6 +126,7 @@
       <button class="icon-btn hide-sm" id="openPalette" type="button" aria-label="Open command palette" title="Command palette (Ctrl K)"><svg class="i"><use href="#i-command"/></svg></button>
     </header>
 
+    <div class="dropzone" id="dropzone" hidden><div><svg class="i"><use href="#i-clip"/></svg><b>Drop to attach</b><small>Images, PDF, Word, Excel, PowerPoint, text and code</small></div></div>
     <div class="offline" id="offlineBar" hidden>You're offline. Messages will fail until you reconnect.</div>
 
     <section class="stage" id="stage" tabindex="-1" aria-label="Conversation">
@@ -158,10 +163,13 @@
     <footer class="composer-wrap">
       <form class="composer" id="chatForm" autocomplete="off">
         <div class="chips" id="chips"></div>
+        <div class="atts" id="atts" hidden></div>
         <textarea id="promptInput" rows="1" dir="auto" placeholder="Message AI HUB" data-i18n-ph="placeholder" aria-label="Message AI HUB" enterkeyhint="send"></textarea>
         <div class="composer-row">
           <div class="tools">
             <button type="button" class="tool-btn" id="toolsBtn" aria-haspopup="menu" aria-expanded="false" aria-label="Modes and tools" title="Modes and tools"><svg class="i"><use href="#i-plus"/></svg></button>
+            <button type="button" class="tool-btn" id="attachBtn" aria-label="Attach files or images" title="Attach files or images"><svg class="i"><use href="#i-clip"/></svg></button>
+            <input type="file" id="fileInput" multiple hidden accept="image/*,.pdf,.docx,.xlsx,.xls,.xlsm,.ods,.pptx,.csv,.tsv,.txt,.md,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.rs,.php,.sql,.sh,.yml,.yaml,.log,.srt">
             <button type="button" class="tool-btn" id="micBtn" aria-label="Voice input" title="Voice input"><svg class="i"><use href="#i-mic"/></svg></button>
           </div>
           <div class="tools">
@@ -196,8 +204,17 @@
         <h3>Chat</h3>
         <div class="row"><div class="lbl"><b>Enter sends message</b><small>Off: Ctrl+Enter sends, Enter adds a line</small></div>
           <label class="switch"><input type="checkbox" id="setEnter"><span></span></label></div>
+        <div class="row"><div class="lbl"><b>Web search and live data</b><small>Auto looks things up when needed (news, scores, prices, weather, dates)</small></div>
+          <div class="seg" data-setting="web"><button type="button" data-v="auto">Auto</button><button type="button" data-v="on">Always</button><button type="button" data-v="off">Off</button></div></div>
         <div class="row"><div class="lbl"><b>Stream replies</b><small>Show the answer as it is written</small></div>
           <label class="switch"><input type="checkbox" id="setStream"><span></span></label></div>
+      </section>
+      <section>
+        <h3>Personalize</h3>
+        <div class="row col"><div class="lbl"><b>Your name</b><small>Optional. AI HUB can use it when it helps</small></div>
+          <div class="inline"><input id="setName" type="text" maxlength="60" placeholder="Syed Hasan" autocomplete="off"></div></div>
+        <div class="row col"><div class="lbl"><b>Custom instructions</b><small>Tell AI HUB how to answer: your role, preferred tone, language, format</small></div>
+          <textarea id="setAbout" class="area" rows="4" maxlength="1200" placeholder="e.g. I'm a web developer in Karachi. Keep answers short and show code first."></textarea></div>
       </section>
       <section>
         <h3>Backend</h3>
@@ -232,12 +249,22 @@
   </div>
 </dialog>
 
+<!-- Preview (sandboxed) -->
+<dialog id="previewDialog" class="preview" aria-label="Preview">
+  <div class="dlg">
+    <header class="dlg-head"><h2 id="previewTitle">Preview</h2>
+      <div class="pv-actions"><button class="btn" type="button" id="pvSave"><svg class="i"><use href="#i-download"/></svg>Download</button><button class="icon-btn" type="button" data-close aria-label="Close preview"><svg class="i"><use href="#i-x"/></svg></button></div></header>
+    <iframe id="previewFrame" title="Preview" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>
+  </div>
+</dialog>
+
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
 <script src="config.js"></script>
 <script src="i18n.js"></script>
 <script src="markdown.js"></script>
 <script src="orb.js"></script>
+<script src="files.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
